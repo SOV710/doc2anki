@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# real api config
+ai_providers.toml
