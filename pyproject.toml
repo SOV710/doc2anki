@@ -1,0 +1,38 @@
+[project]
+name = "doc2anki"
+version = "0.1.0"
+description = "Convert knowledge base documents to Anki flashcards"
+readme = "README.md"
+authors = [
+    { name = "SOV710", email = "chris916911179@outlook.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.9.0",
+    "pydantic>=2.0.0",
+    "openai>=1.0.0",
+    "tiktoken>=0.5.0",
+    "genanki>=0.13.0",
+    "markdown-it-py>=3.0.0",
+    "orgparse>=0.4.0",
+    "jinja2>=3.0.0",
+    "tomli>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+doc2anki = "doc2anki.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/doc2anki"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
