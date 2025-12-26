@@ -1,359 +1,108 @@
 #+TITLE: doc2anki
-#+AUTHOR: sov710
-#+DESCRIPTION: Convert Markdown and Org-mode documents into Anki flashcards using LLM
+#+AUTHOR: SOV710
+#+EMAIL: chris916911179@outlook.com
 
-A CLI tool that converts Markdown and Org-mode documents into Anki flashcards using LLM. Features AST-based intelligent chunking, multi-provider AI support (OpenAI, Claude, DeepSeek, Qwen, etc.), and direct APKG export. Turn your knowledge base into spaced repetition cards automatically.
+* 概述
 
-* Features
+doc2anki 将知识库文档转换为 Anki 学习卡片。
 
-- *Multi-format support*: Markdown (=.md=) and Org-mode (=.org=)
-- *Intelligent chunking*: AST-based parsing with recursive splitting, respects document structure
-- *Global context*: Define terminology once, apply to all chunks via =context= blocks
-- *Multiple AI providers*: OpenAI, Anthropic Claude, DeepSeek, Qwen, Zhipu GLM, Moonshot, Doubao, SiliconFlow
-- *Flexible authentication*: Direct API key, environment variables, or dotenv files
-- *Two card types*: Basic (Q&A) and Cloze (fill-in-the-blank)
-- *Direct APKG export*: Import directly into Anki without intermediate formats
-- *Smart deck organization*: Auto-generate deck hierarchy and tags from file paths
+通过大语言模型从 Markdown 或 Org-mode 文件中提取知识点，生成符合间隔重复学习规律的记忆卡片。
 
-* Installation
+* 环境要求
 
-Requires Python 3.12+ and [[https://github.com/astral-sh/uv][uv]].
+- Python 3.12 或更高版本
+- 支持 OpenAI API 格式的语言模型服务
 
-#+begin_src bash
-git clone https://github.com/sov710/doc2anki.git
-cd doc2anki
+* 安装
+
+#+begin_src sh
 uv sync
 #+end_src
 
-* Quick Start
+* 配置
 
-** 1. Configure AI Provider
-
-Copy the example config and add your API key:
-
-#+begin_src bash
-cp ai_providers.toml.example ai_providers.toml
-#+end_src
-
-Edit =ai_providers.toml=:
+在项目根目录创建 =ai_providers.toml= 文件，配置语言模型提供商:
 
 #+begin_src toml
-[deepseek]
-enable = true
-auth_type = "direct"
-base_url = "https://api.deepseek.com"
-model = "deepseek-chat"
-api_key = "sk-your-api-key-here"
-#+end_src
-
-** 2. Prepare Your Document
-
-Create a Markdown file with optional context block:
-
-#+begin_src markdown
-# TCP/IP Basics
-
-```context
-- TCP: "Transmission Control Protocol, connection-oriented reliable transport"
-- IP: "Internet Protocol, handles packet routing and addressing"
-```
-
-## Three-Way Handshake
-
-TCP establishes connections via three-way handshake:
-
-1. Client sends SYN
-2. Server replies SYN+ACK
-3. Client sends ACK
-#+end_src
-
-Or an Org-mode file:
-
-#+begin_src org
-,* TCP/IP Basics
-
-,#+BEGIN_CONTEXT
-- TCP: "Transmission Control Protocol, connection-oriented reliable transport"
-- IP: "Internet Protocol, handles packet routing and addressing"
-,#+END_CONTEXT
-
-,** Three-Way Handshake
-
-TCP establishes connections via three-way handshake:
-
-1. Client sends SYN
-2. Server replies SYN+ACK
-3. Client sends ACK
-#+end_src
-
-** 3. Generate Cards
-
-#+begin_src bash
-# Preview parsing result (no API call)
-uv run doc2anki generate --dry-run ./notes/tcp.md -p deepseek
-
-# Generate APKG
-uv run doc2anki generate ./notes/tcp.md -p deepseek -o tcp.apkg
-#+end_src
-
-** 4. Import to Anki
-
-Open Anki → File → Import → Select =tcp.apkg=
-
-* Usage
-
-** Commands
-
-#+begin_src bash
-# List available AI providers
-uv run doc2anki list
-
-# List all providers (including disabled)
-uv run doc2anki list --all
-
-# Generate cards
-uv run doc2anki generate <INPUT_PATH> -p <PROVIDER> [OPTIONS]
-
-# Validate config file
-uv run doc2anki validate
-#+end_src
-
-** Generate Options
-
-| Option              | Description                          | Default              |
-|---------------------+--------------------------------------+----------------------|
-| =-o, --output=      | Output APKG file path                | =output.apkg=        |
-| =-p, --provider=    | AI provider name (required)          | -                    |
-| =-c, --config=      | Config file path                     | =ai_providers.toml=  |
-| =--prompt-template= | Custom Jinja2 prompt template        | Built-in template    |
-| =--max-tokens=      | Max tokens per chunk                 | =3000=               |
-| =--max-retries=     | Max retries on LLM failure           | =3=                  |
-| =--deck-depth=      | Deck hierarchy depth from path       | =2=                  |
-| =--extra-tags=      | Additional tags (comma-separated)    | -                    |
-| =--dry-run=         | Parse only, no LLM calls             | =false=              |
-| =--verbose=         | Verbose output                       | =false=              |
-
-** Examples
-
-#+begin_src bash
-# Process single file
-uv run doc2anki generate ./notes/rust.md -p deepseek -o rust.apkg
-
-# Process directory
-uv run doc2anki generate ./notes/programming/ -p qwen -o programming.apkg
-
-# Custom deck depth and extra tags
-uv run doc2anki generate ./notes/cs/algorithms/sorting.md \
-  -p deepseek \
-  -o sorting.apkg \
-  --deck-depth 3 \
-  --extra-tags "interview,fundamentals"
-
-# Use custom prompt template
-uv run doc2anki generate ./notes/math.md -p claude \
-  --prompt-template ./my-prompt.j2 \
-  -o math.apkg
-#+end_src
-
-* Configuration
-
-** AI Provider Config
-
-The =ai_providers.toml= supports three authentication types:
-
-*** Direct (key in config file)
-
-#+begin_src toml
-[deepseek]
-enable = true
-auth_type = "direct"
-base_url = "https://api.deepseek.com"
-model = "deepseek-chat"
-api_key = "sk-xxxxxxxxxxxxxxxx"
-#+end_src
-
-*** Environment Variable
-
-#+begin_src toml
-[openai]
+[provider_name]
 enable = true
 auth_type = "env"
-base_url_env = "OPENAI_BASE_URL"
-model_env = "OPENAI_MODEL"
-api_key_env = "OPENAI_API_KEY"
-default_base_url = "https://api.openai.com/v1"
-default_model = "gpt-4o"
+api_key_env = "YOUR_API_KEY_ENV_VAR"
+default_base_url = "https://api.example.com/v1"
+default_model = "model-name"
 #+end_src
 
-*** Dotenv File
+支持三种认证方式:
+- =direct=: 凭据直接写在配置文件中
+- =env=: 从环境变量读取
+- =dotenv=: 从 .env 文件加载
 
-#+begin_src toml
-[anthropic]
-enable = true
-auth_type = "dotenv"
-dotenv_path = ".env.d/anthropic.env"
-base_url_key = "ANTHROPIC_BASE_URL"
-model_key = "ANTHROPIC_MODEL"
-api_key_key = "ANTHROPIC_API_KEY"
-default_base_url = "https://api.anthropic.com"
-default_model = "claude-sonnet-4-20250514"
+* 使用
+
+** 查看可用的模型提供商
+
+#+begin_src sh
+doc2anki list
 #+end_src
 
-** Supported Providers
+** 验证配置
 
-| Provider    | Base URL                                        | Models                      |
-|-------------+-------------------------------------------------+-----------------------------|
-| OpenAI      | =https://api.openai.com/v1=                     | gpt-4o, gpt-4-turbo, etc.   |
-| Anthropic   | =https://api.anthropic.com=                     | claude-sonnet, claude-opus  |
-| DeepSeek    | =https://api.deepseek.com=                      | deepseek-chat, deepseek-coder |
-| Qwen        | =https://dashscope.aliyuncs.com/compatible-mode/v1= | qwen-plus, qwen-max     |
-| Zhipu       | =https://open.bigmodel.cn/api/paas/v4=          | glm-4-plus, glm-4           |
-| Moonshot    | =https://api.moonshot.cn/v1=                    | moonshot-v1-8k, v1-32k      |
-| Doubao      | =https://ark.cn-beijing.volces.com/api/v3=      | doubao-pro-4k, doubao-pro-32k |
-| SiliconFlow | =https://api.siliconflow.cn/v1=                 | Various open-source models  |
+#+begin_src sh
+doc2anki validate
+doc2anki validate -p provider_name
+#+end_src
 
-* Context Blocks
+** 生成卡片
 
-Context blocks define global terminology for the entire document. They are extracted during parsing and included in every LLM prompt for that document.
+#+begin_src sh
+doc2anki generate input.md -p provider_name -o output.apkg
+#+end_src
 
-** Markdown Syntax
+处理整个目录:
 
-Use a fenced code block with =context= as the language:
+#+begin_src sh
+doc2anki generate docs/ -p provider_name -o knowledge.apkg
+#+end_src
+
+常用选项:
+- =--max-tokens=: 每个文本块的最大 token 数量 (默认 3000)
+- =--deck-depth=: 从文件路径生成卡片组层级的深度 (默认 2)
+- =--extra-tags=: 添加额外标签，用逗号分隔
+- =--dry-run=: 仅解析和分块，不调用语言模型
+- =--verbose=: 显示详细输出
+
+* 文档格式
+
+** 全局上下文块
+
+在文档开头定义领域术语，供语言模型生成卡片时参考。
+
+Markdown 格式:
 
 #+begin_src markdown
 ```context
-- Term1: "Definition of term 1"
-- Term2: "Definition of term 2"
+- TCP: "传输控制协议"
+- HTTP: "超文本传输协议"
 ```
 #+end_src
 
-** Org-mode Syntax
-
-Use a =CONTEXT= special block:
+Org-mode 格式:
 
 #+begin_src org
-,#+BEGIN_CONTEXT
-- Term1: "Definition of term 1"
-- Term2: "Definition of term 2"
-,#+END_CONTEXT
+#+BEGIN_CONTEXT
+- TCP: "传输控制协议"
+- HTTP: "超文本传输协议"
+#+END_CONTEXT
 #+end_src
 
-** Format
+** 文件路径与卡片组织
 
-The content inside context blocks uses YAML list syntax:
+文件路径自动转换为 Anki 卡片组层级和标签。
 
-#+begin_src yaml
-- TermName: "Term definition or explanation"
-- AnotherTerm: "Another definition"
-#+end_src
+例如: =computing/network/tcp_ip.md=
+- 卡片组: =computing::network= (深度为 2)
+- 标签: =computing=, =network=, =tcp_ip=
 
-Context blocks are optional. Documents without them will be processed normally.
+* 许可证
 
-* Card Types
-
-** Basic Cards
-
-Standard question-and-answer format:
-
-#+begin_src json
-{
-  "type": "basic",
-  "front": "What is the time complexity of binary search?",
-  "back": "O(log n)",
-  "tags": ["algorithms", "search"]
-}
-#+end_src
-
-** Cloze Cards
-
-Fill-in-the-blank format using Anki's cloze syntax:
-
-#+begin_src json
-{
-  "type": "cloze",
-  "text": "Binary search has {{c1::O(log n)}} time complexity",
-  "tags": ["algorithms", "search"]
-}
-#+end_src
-
-* Deck and Tag Strategy
-
-File paths are automatically converted to deck names and tags:
-
-| File Path                            | Deck Name (depth=2) | Tags                                    |
-|--------------------------------------+---------------------+-----------------------------------------|
-| =computing/pl/rust/ownership.md=     | =computing::pl=     | =computing=, =pl=, =rust=, =ownership=  |
-| =math/calculus/derivatives.org=      | =math::calculus=    | =math=, =calculus=, =derivatives=       |
-| =notes/daily.md=                     | =notes::daily=      | =notes=, =daily=                        |
-
-Special characters in paths (=&=, =/=, =\=) are normalized to underscores.
-
-* Error Handling
-
-doc2anki follows a *fail-fast* strategy. All errors result in immediate exit with clear messages:
-
-- Chunk exceeds token limit with no further subdivision possible → Exit
-- JSON parsing fails after max retries → Exit
-- Pydantic validation fails after max retries → Exit
-- API call fails → Exit
-
-No silent failures. Fix the issue and retry.
-
-* Workflow Tips
-
-** Full Regeneration
-
-doc2anki does not maintain state. Each run is a full generation:
-
-1. Modify your document
-2. Regenerate the APKG
-3. Delete the old deck in Anki (by tag or deck name)
-4. Import the new APKG
-
-** Organizing Large Knowledge Bases
-
-Keep documents small and focused. One topic per file:
-
-#+begin_src
-notes/
-├── cs/
-│   ├── algorithms/
-│   │   ├── sorting.md      → cs::algorithms deck
-│   │   ├── searching.md
-│   │   └── graph.md
-│   └── networking/
-│       ├── tcp.md          → cs::networking deck
-│       └── http.md
-└── math/
-    └── linear-algebra/
-        ├── vectors.md      → math::linear-algebra deck
-        └── matrices.md
-#+end_src
-
-This minimizes the "blast radius" when regenerating cards.
-
-* Development
-
-#+begin_src bash
-# Install dev dependencies
-uv sync --dev
-
-# Run tests
-uv run pytest
-
-# Type check
-uv run mypy src/
-
-# Format
-uv run ruff format src/
-#+end_src
-
-* License
-
-MIT
-
-* Acknowledgments
-
-- [[https://github.com/kerrickstaley/genanki][genanki]] - Programmatic Anki deck generation
-- [[https://github.com/executablebooks/markdown-it-py][markdown-it-py]] - Markdown parsing
-- [[https://github.com/karlicoss/orgparse][orgparse]] - Org-mode parsing
+MIT License
