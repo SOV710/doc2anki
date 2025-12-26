@@ -9,5 +9,23 @@ wheels/
 # Virtual environments
 .venv
 
+# Claude config
+.claude/
+
 # real api config
 ai_providers.toml
+
+# remove assets file
+*.md
+*.org
+
+# keep .md/.org file in tests/
+!tests/**/*.md
+!tests/**/*.org
+
+# keep README
+![Rr][Ee][Aa][Dd][Mm][Ee]*.md
+![Rr][Ee][Aa][Dd][Mm][Ee]*.org
+
+# remove output files
+*.apkg
