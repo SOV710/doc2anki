@@ -21,7 +21,7 @@ app = typer.Typer(
 )
 console = Console()
 
-DEFAULT_CONFIG_PATH = Path("ai_providers.toml")
+DEFAULT_CONFIG_PATH = Path("config/ai_providers.toml")
 
 
 @app.command("list")
@@ -143,7 +143,7 @@ def generate_cmd(
         help="Input file or directory path",
     ),
     output: Path = typer.Option(
-        Path("output.apkg"),
+        Path("outputs/output.apkg"),
         "-o",
         "--output",
         help="Output APKG file path",

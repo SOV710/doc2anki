@@ -78,16 +78,16 @@ def _resolve_direct_auth(provider_name: str, config: dict[str, Any]) -> Provider
 
 def _resolve_env_auth(provider_name: str, config: dict[str, Any]) -> ProviderConfig:
     """Resolve environment variable authentication config."""
-    if "api_key_env" not in config:
+    if "api_key" not in config:
         raise ConfigError(
-            f"Provider '{provider_name}' with auth_type=env missing 'api_key_env'"
+            f"Provider '{provider_name}' with auth_type=env missing 'api_key'"
         )
 
-    api_key = os.getenv(config["api_key_env"])
+    api_key = os.getenv(config["api_key"])
     if not api_key:
         raise ConfigError(
             f"Provider '{provider_name}': environment variable "
-            f"'{config['api_key_env']}' not set or empty"
+            f"'{config['api_key']}' not set or empty"
         )
 
     base_url = None
@@ -121,9 +121,9 @@ def _resolve_dotenv_auth(provider_name: str, config: dict[str, Any]) -> Provider
         raise ConfigError(
             f"Provider '{provider_name}' with auth_type=dotenv missing 'dotenv_path'"
         )
-    if "api_key_key" not in config:
+    if "api_key" not in config:
         raise ConfigError(
-            f"Provider '{provider_name}' with auth_type=dotenv missing 'api_key_key'"
+            f"Provider '{provider_name}' with auth_type=dotenv missing 'api_key'"
         )
 
     dotenv_path = Path(config["dotenv_path"])
@@ -135,10 +135,10 @@ def _resolve_dotenv_auth(provider_name: str, config: dict[str, Any]) -> Provider
     # Load the dotenv file
     load_dotenv(dotenv_path, override=True)
 
-    api_key = os.getenv(config["api_key_key"])
+    api_key = os.getenv(config["api_key"])
     if not api_key:
         raise ConfigError(
-            f"Provider '{provider_name}': key '{config['api_key_key']}' "
+            f"Provider '{provider_name}': key '{config['api_key']}' "
             f"not found in {dotenv_path}"
         )
 

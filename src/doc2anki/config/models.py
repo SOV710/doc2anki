@@ -29,7 +29,7 @@ class EnvAuthConfig(BaseModel):
     auth_type: Literal["env"]
     base_url_env: Optional[str] = None
     model_env: Optional[str] = None
-    api_key_env: str
+    api_key: str  # Environment variable name containing the API key
     default_base_url: Optional[str] = None
     default_model: Optional[str] = None
 
@@ -42,7 +42,7 @@ class DotenvAuthConfig(BaseModel):
     dotenv_path: str
     base_url_key: Optional[str] = None
     model_key: Optional[str] = None
-    api_key_key: str
+    api_key: str  # Key name in the dotenv file containing the API key
     default_base_url: Optional[str] = None
     default_model: Optional[str] = None
 

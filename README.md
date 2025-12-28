@@ -19,13 +19,13 @@ uv sync
 
 ## 配置
 
-在项目根目录创建 `ai_providers.toml` 文件，配置语言模型提供商:
+在 `config/ai_providers.toml` 文件中配置语言模型提供商:
 
 ```toml
 [provider_name]
 enable = true
 auth_type = "env"
-api_key_env = "YOUR_API_KEY_ENV_VAR"
+api_key = "YOUR_API_KEY_ENV_VAR"
 default_base_url = "https://api.example.com/v1"
 default_model = "model-name"
 ```

@@ -13,7 +13,7 @@ enable = false
 auth_type = "env"
 base_url_env = "OPENAI_BASE_URL"
 model_env = "OPENAI_MODEL"
-api_key_env = "OPENAI_API_KEY"
+api_key = "OPENAI_API_KEY"
 default_base_url = "https://api.openai.com/v1"
 default_model = "gpt-4o"
 
@@ -23,14 +23,14 @@ auth_type = "dotenv"
 dotenv_path = ".env.d/anthropic.env"
 base_url_key = "ANTHROPIC_BASE_URL"
 model_key = "ANTHROPIC_MODEL"
-api_key_key = "ANTHROPIC_API_KEY"
+api_key = "ANTHROPIC_API_KEY"
 default_base_url = "https://api.anthropic.com"
 default_model = "claude-sonnet-4-20250514"
 
 [google]
 enable = false
 auth_type = "env"
-api_key_env = "GOOGLE_API_KEY"
+api_key = "GOOGLE_API_KEY"
 model_env = "GOOGLE_MODEL"
 default_base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
 default_model = "gemini-1.5-pro"
@@ -40,7 +40,7 @@ enable = false
 auth_type = "env"
 base_url_env = "ZHIPU_BASE_URL"
 model_env = "ZHIPU_MODEL"
-api_key_env = "ZHIPU_API_KEY"
+api_key = "ZHIPU_API_KEY"
 default_base_url = "https://open.bigmodel.cn/api/paas/v4"
 default_model = "glm-4-plus"
 
@@ -49,7 +49,7 @@ enable = false
 auth_type = "env"
 base_url_env = "MOONSHOT_BASE_URL"
 model_env = "MOONSHOT_MODEL"
-api_key_env = "MOONSHOT_API_KEY"
+api_key = "MOONSHOT_API_KEY"
 default_base_url = "https://api.moonshot.cn/v1"
 default_model = "moonshot-v1-8k"
 
@@ -58,7 +58,7 @@ enable = false
 auth_type = "env"
 base_url_env = "QWEN_BASE_URL"
 model_env = "QWEN_MODEL"
-api_key_env = "DASHSCOPE_API_KEY"
+api_key = "DASHSCOPE_API_KEY"
 default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 default_model = "qwen-plus"
 
@@ -67,7 +67,7 @@ enable = false
 auth_type = "env"
 base_url_env = "DOUBAO_BASE_URL"
 model_env = "DOUBAO_MODEL"
-api_key_env = "DOUBAO_API_KEY"
+api_key = "DOUBAO_API_KEY"
 default_base_url = "https://ark.cn-beijing.volces.com/api/v3"
 default_model = "doubao-pro-4k"
 
@@ -76,6 +76,6 @@ enable = false
 auth_type = "env"
 base_url_env = "SILICONFLOW_BASE_URL"
 model_env = "SILICONFLOW_MODEL"
-api_key_env = "SILICONFLOW_API_KEY"
+api_key = "SILICONFLOW_API_KEY"
 default_base_url = "https://api.siliconflow.cn/v1"
 default_model = "Qwen/Qwen2.5-72B-Instruct"
