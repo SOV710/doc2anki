@@ -111,9 +111,9 @@ default_base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
 ```
 
-配置完成后，通过 `doc2anki list` 列出当前配置文件中被 enable 的 api providers, `docs2anki list --all` 列出所有 providers
+配置完成后，通过 `doc2anki list` 列出当前配置文件中被 enable 的 api providers, `doc2anki list --all` 列出所有 providers
 
-注：现在的 `docs2anki list` 还无法无法读 dotenv 文件中的 providers, 只能读到 `default_base_url` 和 `default_model`
+注：现在的 `doc2anki list` 还无法无法读 dotenv 文件中的 providers, 只能读到 `default_base_url` 和 `default_model`
 
 ## 使用
 
