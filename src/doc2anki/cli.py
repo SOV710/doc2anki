@@ -1,5 +1,6 @@
 """CLI interface for doc2anki."""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -21,13 +22,57 @@ app = typer.Typer(
 )
 console = Console()
 
-DEFAULT_CONFIG_PATH = Path("config/ai_providers.toml")
+# Config file name
+CONFIG_FILENAME = "ai_providers.toml"
+
+
+def resolve_config_path(user_config: Optional[Path] = None) -> Path:
+    """
+    Resolve configuration file path with fallback chain.
+
+    Resolution order:
+    1. User-provided path (if specified and exists)
+    2. ./config/ai_providers.toml (current directory)
+    3. ~/.config/doc2anki/ai_providers.toml (XDG config)
+
+    Args:
+        user_config: User-provided config path (from --config option)
+
+    Returns:
+        Resolved config path
+
+    Raises:
+        ConfigError: If no config file is found
+    """
+    # 1. User-provided path
+    if user_config and user_config.exists():
+        return user_config
+
+    # 2. Current directory
+    local_config = Path("config") / CONFIG_FILENAME
+    if local_config.exists():
+        return local_config
+
+    # 3. XDG config directory
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+    xdg_config = Path(xdg_config_home) / "doc2anki" / CONFIG_FILENAME
+    if xdg_config.exists():
+        return xdg_config
+
+    # No config found - return the user path or local path for error message
+    if user_config:
+        return user_config
+    return local_config
+
+
+# Default is None - will be resolved by resolve_config_path()
+DEFAULT_CONFIG_PATH = None
 
 
 @app.command("list")
 def list_cmd(
-    config: Path = typer.Option(
-        DEFAULT_CONFIG_PATH,
+    config: Optional[Path] = typer.Option(
+        None,
         "-c",
         "--config",
         help="Path to AI provider configuration file",
@@ -39,8 +84,9 @@ def list_cmd(
     ),
 ) -> None:
     """List available AI providers."""
+    resolved_config = resolve_config_path(config)
     try:
-        providers = list_providers(config, show_all=all_providers)
+        providers = list_providers(resolved_config, show_all=all_providers)
     except ConfigError as e:
         fatal_exit(str(e))
         return
@@ -77,8 +123,8 @@ def list_cmd(
 
 @app.command("validate")
 def validate_cmd(
-    config: Path = typer.Option(
-        DEFAULT_CONFIG_PATH,
+    config: Optional[Path] = typer.Option(
+        None,
         "-c",
         "--config",
         help="Path to AI provider configuration file",
@@ -91,8 +137,9 @@ def validate_cmd(
     ),
 ) -> None:
     """Validate configuration file."""
+    resolved_config = resolve_config_path(config)
     try:
-        providers = list_providers(config, show_all=True)
+        providers = list_providers(resolved_config, show_all=True)
     except ConfigError as e:
         fatal_exit(str(e))
         return
@@ -100,7 +147,7 @@ def validate_cmd(
     if provider:
         # Validate specific provider
         try:
-            resolved = get_provider_config(config, provider)
+            resolved = get_provider_config(resolved_config, provider)
             console.print(f"[green]Provider '{provider}' configuration is valid.[/green]")
             console.print(f"  Base URL: {resolved.base_url}")
             console.print(f"  Model: {resolved.model}")
@@ -120,7 +167,7 @@ def validate_cmd(
 
             enabled_count += 1
             try:
-                get_provider_config(config, p.name)
+                get_provider_config(resolved_config, p.name)
                 console.print(f"  [green]✓[/green] {p.name}")
                 valid_count += 1
             except ConfigError as e:
@@ -154,8 +201,8 @@ def generate_cmd(
         "--provider",
         help="AI provider name to use",
     ),
-    config: Path = typer.Option(
-        DEFAULT_CONFIG_PATH,
+    config: Optional[Path] = typer.Option(
+        None,
         "-c",
         "--config",
         help="Path to AI provider configuration file",
@@ -185,6 +232,16 @@ def generate_cmd(
         "--extra-tags",
         help="Additional tags (comma-separated)",
     ),
+    chunk_level: Optional[int] = typer.Option(
+        None,
+        "--chunk-level",
+        help="Heading level to chunk at (1-6, default: auto)",
+    ),
+    include_parent_chain: bool = typer.Option(
+        True,
+        "--include-parent-chain/--no-parent-chain",
+        help="Include heading hierarchy as context",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -198,18 +255,22 @@ def generate_cmd(
 ) -> None:
     """Generate Anki cards from documents."""
     # Import parser here to avoid circular imports and speed up CLI startup
-    from .parser import parse_document, chunk_document
+    from .parser import parse_document, build_document_tree, detect_format
+    from .pipeline import process_pipeline, auto_detect_level
 
     # Validate input path
     if not input_path.exists():
         fatal_exit(f"Input path does not exist: {input_path}")
         return
 
+    # Resolve config path
+    resolved_config = resolve_config_path(config)
+
     # Load provider config (unless dry-run)
     provider_config = None
     if not dry_run:
         try:
-            provider_config = get_provider_config(config, provider)
+            provider_config = get_provider_config(resolved_config, provider)
         except ConfigError as e:
             fatal_exit(str(e))
             return
@@ -249,38 +310,79 @@ def generate_cmd(
             for term, definition in global_context.items():
                 console.print(f"  - {term}: {definition}")
 
-        # Chunk document
+        # Build document tree
         try:
-            chunks = chunk_document(content, max_tokens)
+            doc_format = "org" if file_path.suffix.lower() == ".org" else "markdown"
+            tree = build_document_tree(content, doc_format)
         except Exception as e:
-            fatal_exit(f"Failed to chunk {file_path}: {e}")
+            fatal_exit(f"Failed to build document tree for {file_path}: {e}")
+            return
+
+        # Determine chunk level
+        actual_level = chunk_level
+        if actual_level is None:
+            actual_level = auto_detect_level(tree, max_tokens)
+
+        if verbose:
+            console.print(f"[blue]Document tree:[/blue] {tree}")
+            console.print(f"[blue]Chunk level:[/blue] {actual_level}")
+
+        # Process through pipeline
+        try:
+            chunk_contexts = process_pipeline(
+                tree=tree,
+                chunk_level=actual_level,
+                max_tokens=max_tokens,
+                global_context=global_context,
+                include_parent_chain=include_parent_chain,
+            )
+        except Exception as e:
+            fatal_exit(f"Failed to process pipeline for {file_path}: {e}")
             return
 
         if verbose:
-            console.print(f"[blue]Chunks:[/blue] {len(chunks)}")
-            for i, chunk in enumerate(chunks):
-                preview = chunk[:100].replace("\n", " ")
-                console.print(f"  [{i+1}] {preview}...")
+            console.print(f"[blue]Chunks:[/blue] {len(chunk_contexts)}")
+            for i, ctx in enumerate(chunk_contexts):
+                preview = ctx.chunk_content[:100].replace("\n", " ")
+                chain_str = " > ".join(ctx.parent_chain) if ctx.parent_chain else "(root)"
+                console.print(f"  [{i+1}] {chain_str}")
+                console.print(f"      {preview}...")
 
         if dry_run:
             console.print(f"\n[green]Dry run complete for {file_path}[/green]")
             console.print(f"  Global context items: {len(global_context)}")
-            console.print(f"  Chunks: {len(chunks)}")
+            console.print(f"  Chunks: {len(chunk_contexts)}")
             continue
 
         # Import LLM module only when needed
-        from .llm import generate_cards_for_chunks
+        from .llm import generate_cards_for_chunk, create_client, load_template
 
-        # Generate cards
+        # Create client and load template
+        client = create_client(provider_config)
+        template = load_template(prompt_template)
+
+        # Generate cards for each chunk
         try:
-            cards = generate_cards_for_chunks(
-                chunks=chunks,
-                global_context=global_context,
-                provider_config=provider_config,
-                prompt_template_path=prompt_template,
-                max_retries=max_retries,
-                verbose=verbose,
-            )
+            cards = []
+            for i, ctx in enumerate(chunk_contexts):
+                if verbose:
+                    console.print(f"[blue]Processing chunk {i + 1}/{len(chunk_contexts)}...[/blue]")
+
+                chunk_cards = generate_cards_for_chunk(
+                    chunk=ctx.chunk_content,
+                    global_context=ctx.global_context,
+                    client=client,
+                    model=provider_config.model,
+                    template=template,
+                    max_retries=max_retries,
+                    verbose=verbose,
+                    parent_chain=ctx.parent_chain if include_parent_chain else None,
+                )
+                cards.extend(chunk_cards)
+
+                if verbose:
+                    console.print(f"  [green]Generated {len(chunk_cards)} cards[/green]")
+
         except Exception as e:
             fatal_exit(f"Failed to generate cards for {file_path}: {e}")
             return

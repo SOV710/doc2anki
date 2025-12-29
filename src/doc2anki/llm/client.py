@@ -83,6 +83,7 @@ def generate_cards_for_chunk(
     template,
     max_retries: int = 3,
     verbose: bool = False,
+    parent_chain: Optional[List[str]] = None,
 ) -> List[Union[BasicCard, ClozeCard]]:
     """
     Generate cards for a single chunk.
@@ -95,6 +96,7 @@ def generate_cards_for_chunk(
         template: Jinja2 template
         max_retries: Max retry attempts
         verbose: Verbose output
+        parent_chain: Heading hierarchy for this chunk
 
     Returns:
         List of validated cards
@@ -102,7 +104,7 @@ def generate_cards_for_chunk(
     Raises:
         SystemExit: If all retries fail
     """
-    prompt = build_prompt(global_context, chunk, template)
+    prompt = build_prompt(global_context, chunk, template, parent_chain)
 
     for attempt in range(max_retries):
         try:

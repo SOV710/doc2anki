@@ -1,0 +1,56 @@
+{% if global_context %}
+## 文档全局上下文
+
+以下是本文档的关键术语和背景信息，生成卡片时请参考：
+
+{% for term, definition in global_context.items() %}
+- **{{ term }}**: {{ definition }}
+{% endfor %}
+
+---
+{% endif %}
+{% if parent_chain and parent_chain|length > 0 %}
+## 内容位置
+
+当前内容在文档中的位置：{{ parent_chain | join(' > ') }}
+
+---
+{% endif %}
+
+请根据以下内容生成 Anki 学习卡片。
+
+## 要求
+
+1. 卡片类型只能是 `basic`（基础问答）或 `cloze`（填空）
+2. 每张卡片应该是原子化的，只测试一个知识点
+3. 问题应该清晰明确，答案应该简洁准确
+4. 对于适合记忆具体细节的内容，优先使用 cloze 类型
+5. 对于适合理解概念的内容，使用 basic 类型
+
+## 输出格式
+
+请以 JSON 格式输出，严格遵循以下 schema：
+
+{% raw %}
+```json
+{
+  "cards": [
+    {
+      "type": "basic",
+      "front": "问题内容",
+      "back": "答案内容",
+      "tags": ["tag1", "tag2"]
+    },
+    {
+      "type": "cloze",
+      "text": "这是一个{{c1::填空}}示例",
+      "tags": ["tag1"]
+    }
+  ]
+}
+```
+{% endraw %}
+
+## 待处理内容
+
+{{ chunk_content }}

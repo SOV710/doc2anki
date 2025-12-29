@@ -1,0 +1,913 @@
+diff --git a/.gitignore b/.gitignore
+index bf852a9..1b6d44f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -28,5 +28,8 @@ ai_providers.toml
+ ![Rr][Ee][Aa][Dd][Mm][Ee]*.md
+ ![Rr][Ee][Aa][Dd][Mm][Ee]*.org
+ 
++# keep docs/future planning files
++!docs/**/*.md
++
+ # remove output files
+ *.apkg
+diff --git a/README.md b/README.md
+index 7f4430e..7c5a417 100644
+--- a/README.md
++++ b/README.md
+@@ -13,13 +13,37 @@ doc2anki 将知识库文档转换为 Anki 学习卡片。
+ 
+ ## 安装
+ 
++### 全局安装 (推荐)
++
++使用 pipx 或 uv 全局安装后，可在任意位置运行：
++
++```sh
++# 使用 pipx
++pipx install doc2anki
++
++# 或使用 uv
++uv tool install doc2anki
++```
++
++### 开发环境
++
+ ```sh
++git clone https://github.com/your-repo/doc2anki
++cd doc2anki
+ uv sync
+ ```
+ 
+ ## 配置
+ 
+-在 `config/ai_providers.toml` 文件中配置语言模型提供商:
++### 配置文件位置
++
++doc2anki 按以下顺序查找配置文件：
++
++1. 命令行指定的路径 (`--config`)
++2. 当前目录: `./config/ai_providers.toml`
++3. 用户配置目录: `~/.config/doc2anki/ai_providers.toml`
++
++### 配置格式
+ 
+ ```toml
+ [provider_name]
+@@ -31,9 +55,12 @@ default_model = "model-name"
+ ```
+ 
+ 支持三种认证方式:
+-- `direct`: 凭据直接写在配置文件中
+-- `env`: 从环境变量读取
+-- `dotenv`: 从 .env 文件加载
++
++| 认证类型 | api_key 含义 | 示例 |
++|---------|-------------|------|
++| `direct` | API 密钥本身 | `api_key = "sk-xxx..."` |
++| `env` | 环境变量名 | `api_key = "OPENAI_API_KEY"` |
++| `dotenv` | .env 文件中的键名 | `api_key = "API_KEY"` |
+ 
+ ## 使用
+ 
+@@ -41,6 +68,7 @@ default_model = "model-name"
+ 
+ ```sh
+ doc2anki list
++doc2anki list --all  # 包含已禁用的提供商
+ ```
+ 
+ ### 验证配置
+@@ -53,7 +81,7 @@ doc2anki validate -p provider_name
+ ### 生成卡片
+ 
+ ```sh
+-doc2anki generate input.md -p provider_name -o output.apkg
++doc2anki generate input.md -p provider_name
+ ```
+ 
+ 处理整个目录:
+@@ -62,12 +90,68 @@ doc2anki generate input.md -p provider_name -o output.apkg
+ doc2anki generate docs/ -p provider_name -o knowledge.apkg
+ ```
+ 
+-常用选项:
+-- `--max-tokens`: 每个文本块的最大 token 数量 (默认 3000)
+-- `--deck-depth`: 从文件路径生成卡片组层级的深度 (默认 2)
+-- `--extra-tags`: 添加额外标签，用逗号分隔
+-- `--dry-run`: 仅解析和分块，不调用语言模型
+-- `--verbose`: 显示详细输出
++### 命令行选项
++
++**基本选项:**
++
++| 选项 | 默认值 | 说明 |
++|-----|-------|------|
++| `-o, --output` | `outputs/output.apkg` | 输出文件路径 |
++| `-p, --provider` | (必需) | AI 提供商名称 |
++| `-c, --config` | (自动查找) | 配置文件路径 |
++| `--dry-run` | false | 仅解析分块，不调用 LLM |
++| `--verbose` | false | 显示详细输出 |
++
++**分块控制:**
++
++| 选项 | 默认值 | 说明 |
++|-----|-------|------|
++| `--chunk-level` | 自动检测 | 按指定标题级别分块 (1-6) |
++| `--max-tokens` | 3000 | 每个块的最大 token 数量 |
++| `--include-parent-chain` | true | 在提示词中包含标题层级路径 |
++
++**卡片组织:**
++
++| 选项 | 默认值 | 说明 |
++|-----|-------|------|
++| `--deck-depth` | 2 | 从文件路径生成卡组层级的深度 |
++| `--extra-tags` | (无) | 额外标签，逗号分隔 |
++
++## 分块策略
++
++### 自动检测
++
++默认情况下，doc2anki 自动检测最佳分块级别：
++
++1. 遍历各标题级别 (1-6)
++2. 计算每个级别的平均块大小和方差
++3. 选择满足以下条件的级别：
++   - 至少产生 2 个块
++   - 平均块大小在 500-2400 tokens 之间
++   - 块大小分布均匀（标准差 < 平均值的 50%）
++
++### 手动指定
++
++对于特殊文档结构，可手动指定分块级别：
++
++```sh
++# 按二级标题分块
++doc2anki generate input.md -p provider --chunk-level 2
++
++# 按三级标题分块，更细粒度
++doc2anki generate input.md -p provider --chunk-level 3
++```
++
++### 标题层级上下文
++
++启用 `--include-parent-chain` (默认) 时，每个块会包含其在文档中的位置：
++
++```
++## 内容位置
++当前内容在文档中的位置：网络基础 > TCP/IP > 三次握手
++```
++
++这帮助 LLM 理解当前内容的上下文，生成更准确的卡片。
+ 
+ ## 文档格式
+ 
+@@ -101,6 +185,24 @@ Org-mode 格式:
+ - 卡片组: `computing::network` (深度为 2)
+ - 标签: `computing`, `network`, `tcp_ip`
+ 
++## 项目结构
++
++```
++src/doc2anki/
++├── cli.py              # 命令行接口
++├── config/             # 配置加载
++├── parser/             # 文档解析
++│   ├── tree.py         # AST 数据结构
++│   ├── markdown.py     # Markdown 解析
++│   └── orgmode.py      # Org-mode 解析
++├── pipeline/           # 处理管道
++│   ├── classifier.py   # 块类型分类
++│   ├── context.py      # 上下文管理
++│   └── processor.py    # 处理流程
++├── llm/                # LLM 调用
++└── output/             # APKG 生成
++```
++
+ ## 许可证
+ 
+ MIT License
+diff --git a/pyproject.toml b/pyproject.toml
+index 0106eba..ec6763b 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -34,3 +34,13 @@ build-backend = "hatchling.build"
+ 
+ [tool.hatch.build.targets.wheel]
+ packages = ["src/doc2anki"]
++
++[tool.hatch.build.targets.wheel.force-include]
++"src/doc2anki/templates" = "doc2anki/templates"
++
++[tool.hatch.build.targets.sdist]
++include = [
++    "src/doc2anki/**/*.py",
++    "src/doc2anki/**/*.j2",
++    "src/doc2anki/py.typed",
++]
+diff --git a/src/doc2anki/cli.py b/src/doc2anki/cli.py
+index 40ca11b..c98231f 100644
+--- a/src/doc2anki/cli.py
++++ b/src/doc2anki/cli.py
+@@ -1,5 +1,6 @@
+ """CLI interface for doc2anki."""
+ 
++import os
+ from pathlib import Path
+ from typing import Optional
+ 
+@@ -21,13 +22,57 @@ app = typer.Typer(
+ )
+ console = Console()
+ 
+-DEFAULT_CONFIG_PATH = Path("config/ai_providers.toml")
++# Config file name
++CONFIG_FILENAME = "ai_providers.toml"
++
++
++def resolve_config_path(user_config: Optional[Path] = None) -> Path:
++    """
++    Resolve configuration file path with fallback chain.
++
++    Resolution order:
++    1. User-provided path (if specified and exists)
++    2. ./config/ai_providers.toml (current directory)
++    3. ~/.config/doc2anki/ai_providers.toml (XDG config)
++
++    Args:
++        user_config: User-provided config path (from --config option)
++
++    Returns:
++        Resolved config path
++
++    Raises:
++        ConfigError: If no config file is found
++    """
++    # 1. User-provided path
++    if user_config and user_config.exists():
++        return user_config
++
++    # 2. Current directory
++    local_config = Path("config") / CONFIG_FILENAME
++    if local_config.exists():
++        return local_config
++
++    # 3. XDG config directory
++    xdg_config_home = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
++    xdg_config = Path(xdg_config_home) / "doc2anki" / CONFIG_FILENAME
++    if xdg_config.exists():
++        return xdg_config
++
++    # No config found - return the user path or local path for error message
++    if user_config:
++        return user_config
++    return local_config
++
++
++# Default is None - will be resolved by resolve_config_path()
++DEFAULT_CONFIG_PATH = None
+ 
+ 
+ @app.command("list")
+ def list_cmd(
+-    config: Path = typer.Option(
+-        DEFAULT_CONFIG_PATH,
++    config: Optional[Path] = typer.Option(
++        None,
+         "-c",
+         "--config",
+         help="Path to AI provider configuration file",
+@@ -39,8 +84,9 @@ def list_cmd(
+     ),
+ ) -> None:
+     """List available AI providers."""
++    resolved_config = resolve_config_path(config)
+     try:
+-        providers = list_providers(config, show_all=all_providers)
++        providers = list_providers(resolved_config, show_all=all_providers)
+     except ConfigError as e:
+         fatal_exit(str(e))
+         return
+@@ -77,8 +123,8 @@ def list_cmd(
+ 
+ @app.command("validate")
+ def validate_cmd(
+-    config: Path = typer.Option(
+-        DEFAULT_CONFIG_PATH,
++    config: Optional[Path] = typer.Option(
++        None,
+         "-c",
+         "--config",
+         help="Path to AI provider configuration file",
+@@ -91,8 +137,9 @@ def validate_cmd(
+     ),
+ ) -> None:
+     """Validate configuration file."""
++    resolved_config = resolve_config_path(config)
+     try:
+-        providers = list_providers(config, show_all=True)
++        providers = list_providers(resolved_config, show_all=True)
+     except ConfigError as e:
+         fatal_exit(str(e))
+         return
+@@ -100,7 +147,7 @@ def validate_cmd(
+     if provider:
+         # Validate specific provider
+         try:
+-            resolved = get_provider_config(config, provider)
++            resolved = get_provider_config(resolved_config, provider)
+             console.print(f"[green]Provider '{provider}' configuration is valid.[/green]")
+             console.print(f"  Base URL: {resolved.base_url}")
+             console.print(f"  Model: {resolved.model}")
+@@ -120,7 +167,7 @@ def validate_cmd(
+ 
+             enabled_count += 1
+             try:
+-                get_provider_config(config, p.name)
++                get_provider_config(resolved_config, p.name)
+                 console.print(f"  [green]✓[/green] {p.name}")
+                 valid_count += 1
+             except ConfigError as e:
+@@ -154,8 +201,8 @@ def generate_cmd(
+         "--provider",
+         help="AI provider name to use",
+     ),
+-    config: Path = typer.Option(
+-        DEFAULT_CONFIG_PATH,
++    config: Optional[Path] = typer.Option(
++        None,
+         "-c",
+         "--config",
+         help="Path to AI provider configuration file",
+@@ -185,6 +232,16 @@ def generate_cmd(
+         "--extra-tags",
+         help="Additional tags (comma-separated)",
+     ),
++    chunk_level: Optional[int] = typer.Option(
++        None,
++        "--chunk-level",
++        help="Heading level to chunk at (1-6, default: auto)",
++    ),
++    include_parent_chain: bool = typer.Option(
++        True,
++        "--include-parent-chain/--no-parent-chain",
++        help="Include heading hierarchy as context",
++    ),
+     dry_run: bool = typer.Option(
+         False,
+         "--dry-run",
+@@ -198,18 +255,22 @@ def generate_cmd(
+ ) -> None:
+     """Generate Anki cards from documents."""
+     # Import parser here to avoid circular imports and speed up CLI startup
+-    from .parser import parse_document, chunk_document
++    from .parser import parse_document, build_document_tree, detect_format
++    from .pipeline import process_pipeline, auto_detect_level
+ 
+     # Validate input path
+     if not input_path.exists():
+         fatal_exit(f"Input path does not exist: {input_path}")
+         return
+ 
++    # Resolve config path
++    resolved_config = resolve_config_path(config)
++
+     # Load provider config (unless dry-run)
+     provider_config = None
+     if not dry_run:
+         try:
+-            provider_config = get_provider_config(config, provider)
++            provider_config = get_provider_config(resolved_config, provider)
+         except ConfigError as e:
+             fatal_exit(str(e))
+             return
+@@ -249,38 +310,79 @@ def generate_cmd(
+             for term, definition in global_context.items():
+                 console.print(f"  - {term}: {definition}")
+ 
+-        # Chunk document
++        # Build document tree
+         try:
+-            chunks = chunk_document(content, max_tokens)
++            doc_format = "org" if file_path.suffix.lower() == ".org" else "markdown"
++            tree = build_document_tree(content, doc_format)
+         except Exception as e:
+-            fatal_exit(f"Failed to chunk {file_path}: {e}")
++            fatal_exit(f"Failed to build document tree for {file_path}: {e}")
+             return
+ 
++        # Determine chunk level
++        actual_level = chunk_level
++        if actual_level is None:
++            actual_level = auto_detect_level(tree, max_tokens)
++
+         if verbose:
+-            console.print(f"[blue]Chunks:[/blue] {len(chunks)}")
+-            for i, chunk in enumerate(chunks):
+-                preview = chunk[:100].replace("\n", " ")
+-                console.print(f"  [{i+1}] {preview}...")
++            console.print(f"[blue]Document tree:[/blue] {tree}")
++            console.print(f"[blue]Chunk level:[/blue] {actual_level}")
++
++        # Process through pipeline
++        try:
++            chunk_contexts = process_pipeline(
++                tree=tree,
++                chunk_level=actual_level,
++                max_tokens=max_tokens,
++                global_context=global_context,
++                include_parent_chain=include_parent_chain,
++            )
++        except Exception as e:
++            fatal_exit(f"Failed to process pipeline for {file_path}: {e}")
++            return
++
++        if verbose:
++            console.print(f"[blue]Chunks:[/blue] {len(chunk_contexts)}")
++            for i, ctx in enumerate(chunk_contexts):
++                preview = ctx.chunk_content[:100].replace("\n", " ")
++                chain_str = " > ".join(ctx.parent_chain) if ctx.parent_chain else "(root)"
++                console.print(f"  [{i+1}] {chain_str}")
++                console.print(f"      {preview}...")
+ 
+         if dry_run:
+             console.print(f"\n[green]Dry run complete for {file_path}[/green]")
+             console.print(f"  Global context items: {len(global_context)}")
+-            console.print(f"  Chunks: {len(chunks)}")
++            console.print(f"  Chunks: {len(chunk_contexts)}")
+             continue
+ 
+         # Import LLM module only when needed
+-        from .llm import generate_cards_for_chunks
++        from .llm import generate_cards_for_chunk, create_client, load_template
++
++        # Create client and load template
++        client = create_client(provider_config)
++        template = load_template(prompt_template)
+ 
+-        # Generate cards
++        # Generate cards for each chunk
+         try:
+-            cards = generate_cards_for_chunks(
+-                chunks=chunks,
+-                global_context=global_context,
+-                provider_config=provider_config,
+-                prompt_template_path=prompt_template,
+-                max_retries=max_retries,
+-                verbose=verbose,
+-            )
++            cards = []
++            for i, ctx in enumerate(chunk_contexts):
++                if verbose:
++                    console.print(f"[blue]Processing chunk {i + 1}/{len(chunk_contexts)}...[/blue]")
++
++                chunk_cards = generate_cards_for_chunk(
++                    chunk=ctx.chunk_content,
++                    global_context=ctx.global_context,
++                    client=client,
++                    model=provider_config.model,
++                    template=template,
++                    max_retries=max_retries,
++                    verbose=verbose,
++                    parent_chain=ctx.parent_chain if include_parent_chain else None,
++                )
++                cards.extend(chunk_cards)
++
++                if verbose:
++                    console.print(f"  [green]Generated {len(chunk_cards)} cards[/green]")
++
+         except Exception as e:
+             fatal_exit(f"Failed to generate cards for {file_path}: {e}")
+             return
+diff --git a/src/doc2anki/llm/__init__.py b/src/doc2anki/llm/__init__.py
+index d629a68..ef4c464 100644
+--- a/src/doc2anki/llm/__init__.py
++++ b/src/doc2anki/llm/__init__.py
+@@ -1,11 +1,18 @@
+ """LLM module for card generation."""
+ 
+-from .client import generate_cards_for_chunks, LLMError
++from .client import (
++    generate_cards_for_chunks,
++    generate_cards_for_chunk,
++    create_client,
++    LLMError,
++)
+ from .extractor import extract_json, JSONExtractionError
+ from .prompt import load_template, build_prompt
+ 
+ __all__ = [
+     "generate_cards_for_chunks",
++    "generate_cards_for_chunk",
++    "create_client",
+     "LLMError",
+     "extract_json",
+     "JSONExtractionError",
+diff --git a/src/doc2anki/llm/client.py b/src/doc2anki/llm/client.py
+index 7940691..d539e3b 100644
+--- a/src/doc2anki/llm/client.py
++++ b/src/doc2anki/llm/client.py
+@@ -83,6 +83,7 @@ def generate_cards_for_chunk(
+     template,
+     max_retries: int = 3,
+     verbose: bool = False,
++    parent_chain: Optional[List[str]] = None,
+ ) -> List[Union[BasicCard, ClozeCard]]:
+     """
+     Generate cards for a single chunk.
+@@ -95,6 +96,7 @@ def generate_cards_for_chunk(
+         template: Jinja2 template
+         max_retries: Max retry attempts
+         verbose: Verbose output
++        parent_chain: Heading hierarchy for this chunk
+ 
+     Returns:
+         List of validated cards
+@@ -102,7 +104,7 @@ def generate_cards_for_chunk(
+     Raises:
+         SystemExit: If all retries fail
+     """
+-    prompt = build_prompt(global_context, chunk, template)
++    prompt = build_prompt(global_context, chunk, template, parent_chain)
+ 
+     for attempt in range(max_retries):
+         try:
+diff --git a/src/doc2anki/llm/prompt.py b/src/doc2anki/llm/prompt.py
+index a66fd07..4da5304 100644
+--- a/src/doc2anki/llm/prompt.py
++++ b/src/doc2anki/llm/prompt.py
+@@ -1,13 +1,29 @@
+ """Prompt template rendering."""
+ 
++import importlib.resources
+ from pathlib import Path
+ from typing import Optional
+ 
+-from jinja2 import Environment, FileSystemLoader, Template
++from jinja2 import Environment, FileSystemLoader, Template, BaseLoader, TemplateNotFound
++
++
++class PackageLoader(BaseLoader):
++    """Jinja2 loader that loads templates from package resources."""
++
++    def __init__(self, package: str, path: str = ""):
++        self.package = package
++        self.path = path
++
++    def get_source(self, environment, template):
++        try:
++            package_path = f"{self.package}.{self.path}" if self.path else self.package
++            files = importlib.resources.files(package_path)
++            source = (files / template).read_text(encoding="utf-8")
++            return source, template, lambda: True
++        except (FileNotFoundError, ModuleNotFoundError) as e:
++            raise TemplateNotFound(template) from e
+ 
+ 
+-# Default template path (relative to package)
+-DEFAULT_TEMPLATE_DIR = Path(__file__).parent.parent.parent.parent / "templates"
+ DEFAULT_TEMPLATE_NAME = "generate_cards.j2"
+ 
+ 
+@@ -16,23 +32,27 @@ def load_template(template_path: Optional[Path] = None) -> Template:
+     Load Jinja2 template for card generation.
+ 
+     Args:
+-        template_path: Custom template path, or None for default
++        template_path: Custom template path, or None for default (from package)
+ 
+     Returns:
+         Jinja2 Template object
+     """
+     if template_path:
++        # Custom template: use FileSystemLoader
+         template_dir = template_path.parent
+         template_name = template_path.name
++        env = Environment(
++            loader=FileSystemLoader(template_dir),
++            autoescape=False,
++        )
+     else:
+-        template_dir = DEFAULT_TEMPLATE_DIR
++        # Default template: load from package resources
++        env = Environment(
++            loader=PackageLoader("doc2anki", "templates"),
++            autoescape=False,
++        )
+         template_name = DEFAULT_TEMPLATE_NAME
+ 
+-    env = Environment(
+-        loader=FileSystemLoader(template_dir),
+-        autoescape=False,  # Don't escape content
+-    )
+-
+     return env.get_template(template_name)
+ 
+ 
+@@ -40,6 +60,7 @@ def build_prompt(
+     global_context: dict[str, str],
+     chunk: str,
+     template: Template,
++    parent_chain: Optional[list[str]] = None,
+ ) -> str:
+     """
+     Build prompt for LLM from template.
+@@ -48,6 +69,7 @@ def build_prompt(
+         global_context: Document-level context dict
+         chunk: Content chunk to process
+         template: Jinja2 template
++        parent_chain: Heading hierarchy for context (optional)
+ 
+     Returns:
+         Rendered prompt string
+@@ -55,4 +77,5 @@ def build_prompt(
+     return template.render(
+         global_context=global_context,
+         chunk_content=chunk,
++        parent_chain=parent_chain or [],
+     )
+diff --git a/src/doc2anki/parser/__init__.py b/src/doc2anki/parser/__init__.py
+index f19c026..915b86f 100644
+--- a/src/doc2anki/parser/__init__.py
++++ b/src/doc2anki/parser/__init__.py
+@@ -4,8 +4,11 @@ from pathlib import Path
+ 
+ from .base import ParseResult
+ from .markdown import MarkdownParser
++from .markdown import build_tree as build_markdown_tree
+ from .orgmode import OrgModeParser
++from .orgmode import build_tree as build_org_tree
+ from .chunker import chunk_document, count_tokens, ChunkingError
++from .tree import HeadingNode, DocumentTree
+ 
+ 
+ def parse_document(file_path: Path) -> tuple[dict[str, str], str]:
+@@ -35,12 +38,52 @@ def parse_document(file_path: Path) -> tuple[dict[str, str], str]:
+     return result.global_context, result.content
+ 
+ 
++def build_document_tree(content: str, format: str = "markdown") -> DocumentTree:
++    """
++    Build a DocumentTree from document content.
++
++    Args:
++        content: Document content string
++        format: Document format ("markdown" or "org")
++
++    Returns:
++        DocumentTree with parsed heading hierarchy
++
++    Raises:
++        ValueError: If format is not supported
++    """
++    if format in ("markdown", "md"):
++        return build_markdown_tree(content)
++    elif format in ("org", "orgmode"):
++        return build_org_tree(content)
++    else:
++        raise ValueError(f"Unsupported format: {format}. Supported: markdown, org")
++
++
++def detect_format(content: str) -> str:
++    """
++    Detect document format from content.
++
++    Returns "markdown" or "org" based on heading patterns.
++    """
++    import re
++
++    md_headings = len(re.findall(r"^#{1,6}\s+.+$", content, re.MULTILINE))
++    org_headings = len(re.findall(r"^\*+\s+.+$", content, re.MULTILINE))
++
++    return "org" if org_headings > md_headings else "markdown"
++
++
+ __all__ = [
+     "parse_document",
++    "build_document_tree",
++    "detect_format",
+     "chunk_document",
+     "count_tokens",
+     "ChunkingError",
+     "ParseResult",
+     "MarkdownParser",
+     "OrgModeParser",
++    "HeadingNode",
++    "DocumentTree",
+ ]
+diff --git a/src/doc2anki/parser/markdown.py b/src/doc2anki/parser/markdown.py
+index 36d09db..0323c1d 100644
+--- a/src/doc2anki/parser/markdown.py
++++ b/src/doc2anki/parser/markdown.py
+@@ -6,6 +6,7 @@ from pathlib import Path
+ from markdown_it import MarkdownIt
+ 
+ from .base import BaseParser, ParseResult, parse_context_yaml
++from .tree import HeadingNode, DocumentTree
+ 
+ 
+ class MarkdownParser(BaseParser):
+@@ -143,3 +144,95 @@ def split_by_top_headings(content: str) -> list[str]:
+         chunks.append("\n\n".join(current_chunk))
+ 
+     return [c for c in chunks if c.strip()]
++
++
++def build_tree(content: str) -> DocumentTree:
++    """
++    Build a DocumentTree from Markdown content.
++
++    Parses the content and creates a hierarchical tree structure
++    based on heading levels.
++
++    Args:
++        content: Markdown content string
++
++    Returns:
++        DocumentTree with parsed heading hierarchy
++    """
++    tree = DocumentTree()
++    heading_pattern = r"^(#{1,6})\s+(.+?)$"
++
++    lines = content.split("\n")
++    in_code_block = False
++
++    # Stack to track parent nodes: [(level, node), ...]
++    # We use this to find the correct parent for each new heading
++    stack: list[tuple[int, HeadingNode]] = []
++
++    # Content accumulator for the current section
++    current_content_lines: list[str] = []
++
++    # Track content before any heading (preamble)
++    preamble_lines: list[str] = []
++    found_first_heading = False
++
++    def flush_content() -> None:
++        """Flush accumulated content to the current node."""
++        nonlocal current_content_lines
++        if not stack:
++            return
++        content_str = "\n".join(current_content_lines).strip()
++        if content_str:
++            stack[-1][1].content = content_str
++        current_content_lines = []
++
++    for line in lines:
++        # Track code blocks to avoid matching headings inside them
++        stripped = line.strip()
++        if stripped.startswith("```") or stripped.startswith("~~~"):
++            in_code_block = not in_code_block
++
++        if in_code_block:
++            if found_first_heading:
++                current_content_lines.append(line)
++            else:
++                preamble_lines.append(line)
++            continue
++
++        match = re.match(heading_pattern, line)
++        if match:
++            # Save content of previous section
++            flush_content()
++
++            found_first_heading = True
++            level = len(match.group(1))
++            title = match.group(2).strip()
++
++            # Create new node
++            node = HeadingNode(level=level, title=title)
++
++            # Find parent: pop stack until we find a lower level
++            while stack and stack[-1][0] >= level:
++                stack.pop()
++
++            # Add to parent or tree root
++            if stack:
++                stack[-1][1].add_child(node)
++            else:
++                tree.add_child(node)
++
++            # Push to stack
++            stack.append((level, node))
++        else:
++            if found_first_heading:
++                current_content_lines.append(line)
++            else:
++                preamble_lines.append(line)
++
++    # Flush any remaining content
++    flush_content()
++
++    # Set preamble
++    tree.preamble = "\n".join(preamble_lines).strip()
++
++    return tree
+diff --git a/src/doc2anki/parser/orgmode.py b/src/doc2anki/parser/orgmode.py
+index e4ff422..e4b2b81 100644
+--- a/src/doc2anki/parser/orgmode.py
++++ b/src/doc2anki/parser/orgmode.py
+@@ -6,6 +6,7 @@ from pathlib import Path
+ import orgparse
+ 
+ from .base import BaseParser, ParseResult, parse_context_yaml
++from .tree import HeadingNode, DocumentTree
+ 
+ 
+ class OrgModeParser(BaseParser):
+@@ -140,3 +141,95 @@ def split_org_by_top_headings(content: str) -> list[str]:
+         chunks.append("\n\n".join(current_chunk))
+ 
+     return [c for c in chunks if c.strip()]
++
++
++def build_tree(content: str) -> DocumentTree:
++    """
++    Build a DocumentTree from Org-mode content.
++
++    Parses the content and creates a hierarchical tree structure
++    based on heading levels.
++
++    Args:
++        content: Org-mode content string
++
++    Returns:
++        DocumentTree with parsed heading hierarchy
++    """
++    tree = DocumentTree()
++    heading_pattern = r"^(\*+)\s+(.+?)$"
++
++    lines = content.split("\n")
++    in_block = False
++
++    # Stack to track parent nodes: [(level, node), ...]
++    stack: list[tuple[int, HeadingNode]] = []
++
++    # Content accumulator for the current section
++    current_content_lines: list[str] = []
++
++    # Track content before any heading (preamble)
++    preamble_lines: list[str] = []
++    found_first_heading = False
++
++    def flush_content() -> None:
++        """Flush accumulated content to the current node."""
++        nonlocal current_content_lines
++        if not stack:
++            return
++        content_str = "\n".join(current_content_lines).strip()
++        if content_str:
++            stack[-1][1].content = content_str
++        current_content_lines = []
++
++    for line in lines:
++        # Track blocks to avoid matching headings inside them
++        if re.match(r"^\s*#\+BEGIN_", line, re.IGNORECASE):
++            in_block = True
++        elif re.match(r"^\s*#\+END_", line, re.IGNORECASE):
++            in_block = False
++
++        if in_block:
++            if found_first_heading:
++                current_content_lines.append(line)
++            else:
++                preamble_lines.append(line)
++            continue
++
++        match = re.match(heading_pattern, line)
++        if match:
++            # Save content of previous section
++            flush_content()
++
++            found_first_heading = True
++            level = len(match.group(1))
++            title = match.group(2).strip()
++
++            # Create new node
++            node = HeadingNode(level=level, title=title)
++
++            # Find parent: pop stack until we find a lower level
++            while stack and stack[-1][0] >= level:
++                stack.pop()
++
++            # Add to parent or tree root
++            if stack:
++                stack[-1][1].add_child(node)
++            else:
++                tree.add_child(node)
++
++            # Push to stack
++            stack.append((level, node))
++        else:
++            if found_first_heading:
++                current_content_lines.append(line)
++            else:
++                preamble_lines.append(line)
++
++    # Flush any remaining content
++    flush_content()
++
++    # Set preamble
++    tree.preamble = "\n".join(preamble_lines).strip()
++
++    return tree

@@ -34,3 +34,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/doc2anki"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/doc2anki/templates" = "doc2anki/templates"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/doc2anki/**/*.py",
+    "src/doc2anki/**/*.j2",
+    "src/doc2anki/py.typed",
+]

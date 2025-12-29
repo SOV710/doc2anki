@@ -4,8 +4,11 @@ from pathlib import Path
 
 from .base import ParseResult
 from .markdown import MarkdownParser
+from .markdown import build_tree as build_markdown_tree
 from .orgmode import OrgModeParser
+from .orgmode import build_tree as build_org_tree
 from .chunker import chunk_document, count_tokens, ChunkingError
+from .tree import HeadingNode, DocumentTree
 
 
 def parse_document(file_path: Path) -> tuple[dict[str, str], str]:
@@ -35,12 +38,52 @@ def parse_document(file_path: Path) -> tuple[dict[str, str], str]:
     return result.global_context, result.content
 
 
+def build_document_tree(content: str, format: str = "markdown") -> DocumentTree:
+    """
+    Build a DocumentTree from document content.
+
+    Args:
+        content: Document content string
+        format: Document format ("markdown" or "org")
+
+    Returns:
+        DocumentTree with parsed heading hierarchy
+
+    Raises:
+        ValueError: If format is not supported
+    """
+    if format in ("markdown", "md"):
+        return build_markdown_tree(content)
+    elif format in ("org", "orgmode"):
+        return build_org_tree(content)
+    else:
+        raise ValueError(f"Unsupported format: {format}. Supported: markdown, org")
+
+
+def detect_format(content: str) -> str:
+    """
+    Detect document format from content.
+
+    Returns "markdown" or "org" based on heading patterns.
+    """
+    import re
+
+    md_headings = len(re.findall(r"^#{1,6}\s+.+$", content, re.MULTILINE))
+    org_headings = len(re.findall(r"^\*+\s+.+$", content, re.MULTILINE))
+
+    return "org" if org_headings > md_headings else "markdown"
+
+
 __all__ = [
     "parse_document",
+    "build_document_tree",
+    "detect_format",
     "chunk_document",
     "count_tokens",
     "ChunkingError",
     "ParseResult",
     "MarkdownParser",
     "OrgModeParser",
+    "HeadingNode",
+    "DocumentTree",
 ]

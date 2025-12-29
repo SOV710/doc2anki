@@ -6,6 +6,7 @@ from pathlib import Path
 from markdown_it import MarkdownIt
 
 from .base import BaseParser, ParseResult, parse_context_yaml
+from .tree import HeadingNode, DocumentTree
 
 
 class MarkdownParser(BaseParser):
@@ -143,3 +144,95 @@ def split_by_top_headings(content: str) -> list[str]:
         chunks.append("\n\n".join(current_chunk))
 
     return [c for c in chunks if c.strip()]
+
+
+def build_tree(content: str) -> DocumentTree:
+    """
+    Build a DocumentTree from Markdown content.
+
+    Parses the content and creates a hierarchical tree structure
+    based on heading levels.
+
+    Args:
+        content: Markdown content string
+
+    Returns:
+        DocumentTree with parsed heading hierarchy
+    """
+    tree = DocumentTree()
+    heading_pattern = r"^(#{1,6})\s+(.+?)$"
+
+    lines = content.split("\n")
+    in_code_block = False
+
+    # Stack to track parent nodes: [(level, node), ...]
+    # We use this to find the correct parent for each new heading
+    stack: list[tuple[int, HeadingNode]] = []
+
+    # Content accumulator for the current section
+    current_content_lines: list[str] = []
+
+    # Track content before any heading (preamble)
+    preamble_lines: list[str] = []
+    found_first_heading = False
+
+    def flush_content() -> None:
+        """Flush accumulated content to the current node."""
+        nonlocal current_content_lines
+        if not stack:
+            return
+        content_str = "\n".join(current_content_lines).strip()
+        if content_str:
+            stack[-1][1].content = content_str
+        current_content_lines = []
+
+    for line in lines:
+        # Track code blocks to avoid matching headings inside them
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_code_block = not in_code_block
+
+        if in_code_block:
+            if found_first_heading:
+                current_content_lines.append(line)
+            else:
+                preamble_lines.append(line)
+            continue
+
+        match = re.match(heading_pattern, line)
+        if match:
+            # Save content of previous section
+            flush_content()
+
+            found_first_heading = True
+            level = len(match.group(1))
+            title = match.group(2).strip()
+
+            # Create new node
+            node = HeadingNode(level=level, title=title)
+
+            # Find parent: pop stack until we find a lower level
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+
+            # Add to parent or tree root
+            if stack:
+                stack[-1][1].add_child(node)
+            else:
+                tree.add_child(node)
+
+            # Push to stack
+            stack.append((level, node))
+        else:
+            if found_first_heading:
+                current_content_lines.append(line)
+            else:
+                preamble_lines.append(line)
+
+    # Flush any remaining content
+    flush_content()
+
+    # Set preamble
+    tree.preamble = "\n".join(preamble_lines).strip()
+
+    return tree

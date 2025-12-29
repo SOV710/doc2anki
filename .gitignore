@@ -28,5 +28,8 @@ ai_providers.toml
 ![Rr][Ee][Aa][Dd][Mm][Ee]*.md
 ![Rr][Ee][Aa][Dd][Mm][Ee]*.org
 
+# keep docs/future planning files
+!docs/**/*.md
+
 # remove output files
 *.apkg
