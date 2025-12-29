@@ -33,3 +33,6 @@ ai_providers.toml
 
 # remove output files
 *.apkg
+
+# remove logs
+*.log
