@@ -1,21 +1,28 @@
 # doc2anki
 
+⚠WARNING: _This project is in an early development phase and is not ready for use._
+
 ## 概述
 
-doc2anki 将知识库文档转换为 Anki 学习卡片。
+doc2anki 可以将任何知识库文档转换为 Anki 学习卡片。这是为了减轻 ankier 们繁重的制卡工作而诞生的
 
-通过大语言模型从 Markdown 或 Org-mode 文件中提取知识点，生成符合间隔重复学习规律的记忆卡片。
+通过 (自己提供 API 的) 大语言模型, 从 Markdown 或 Org-mode 文档中提取知识点，生成符合间隔重复学习规律的记忆卡片。
+
+未来可能考虑支持别的笔记格式，如果有人提 issue 的话
 
 ## 环境要求
 
 - Python 3.12 或更高版本
 - 支持 OpenAI API 格式的语言模型服务
+  - 像是 Anthropic, Google 的 API 就不支持 (截止至 2025-12-29)
 
 ## 安装
 
 ### 全局安装 (推荐)
 
-使用 pipx 或 uv 全局安装后，可在任意位置运行：
+由于这个包已经被我~~拉~~ publish 到了 PyPI，所以你可以使用 pipx 或 uv 全局安装
+
+安装了之后，可在任意位置运行：
 
 ```sh
 # 使用 pipx
@@ -28,7 +35,7 @@ uv tool install doc2anki
 ### 开发环境
 
 ```sh
-git clone https://github.com/your-repo/doc2anki
+git clone https://github.com/SOV710/doc2anki
 cd doc2anki
 uv sync
 ```
@@ -36,6 +43,8 @@ uv sync
 ## 配置
 
 ### 配置文件位置
+
+doc2anki 目前只有一种配置文件，就是配置 ai api 入口的 TOML 文件, 就是 `ai_providers.toml`
 
 doc2anki 按以下顺序查找配置文件：
 
@@ -45,22 +54,66 @@ doc2anki 按以下顺序查找配置文件：
 
 ### 配置格式
 
-```toml
-[provider_name]
-enable = true
-auth_type = "env"
-api_key = "YOUR_API_KEY_ENV_VAR"
-default_base_url = "https://api.example.com/v1"
-default_model = "model-name"
-```
-
-支持三种认证方式:
+doc2anki 设计了三种认证方式
 
 | 认证类型 | api_key 含义 | 示例 |
 |---------|-------------|------|
 | `direct` | API 密钥本身 | `api_key = "sk-xxx..."` |
 | `env` | 环境变量名 | `api_key = "OPENAI_API_KEY"` |
 | `dotenv` | .env 文件中的键名 | `api_key = "API_KEY"` |
+
+1. direct mode
+这是最不安全的配置方式，将自己的 api key 直接放在 toml 配置文件中
+
+下面均以 deepseek 的 api 举例说明
+
+``` toml
+[deepseek]
+enable = true
+auth_type = "direct"
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+api_key = "sk-xxxxxxxxxxxxxxxx"
+```
+
+2. env mode
+
+这是稍微安全一点的配置方式，将自己的 api key 配置在环境变量中，然后让 doc2anki 主动读取对应的环境变量
+
+当然，你可以设置 fallback 后的 default 模式，不过对于 api key 来说，没有什么"fallback mode"
+
+```toml
+[deepseek]
+enable = true
+auth_type = "env"
+base_url = "DEEPSEEK_BASE_URL"
+model = "DEEPSEEK_MODEL"
+api_key = "DEEPSEEK_API_KEY"
+default_base_url = "https://api.deepseek.com"
+default_model = "deepseek-chat"
+```
+
+3. dotenv mode
+
+这是最安全的配置方式，将自己的 api key 注入单独的 .env 文件中而不是对所有程序可见的环境变量中
+
+不过，你必须设置 .env 文件的 path, 否则 doc2anki 找不到
+
+```toml
+[deepseek]
+enable = true
+auth_type = "dotenv"
+base_url = "DEEPSEEK_BASE_URL"
+model = "DEEPSEEK_MODEL"
+api_key = "DEEPSEEK_API_KEY"
+dotenv_path = "/home/user/.env"
+default_base_url = "https://api.deepseek.com"
+default_model = "deepseek-chat"
+```
+
+配置完成后，通过 `doc2anki list` 列出当前配置文件中被 enable 的 api providers, `docs2anki list --all` 列出所有 providers
+
+注：现在的 `docs2anki list` 还无法无法读 dotenv 文件中的 providers, 只能读到 `default_base_url` 和 `default_model`
 
 ## 使用
 
@@ -81,13 +134,13 @@ doc2anki validate -p provider_name
 ### 生成卡片
 
 ```sh
-doc2anki generate input.md -p provider_name
+doc2anki generate input.md -p provider_name -o output.apkg
 ```
 
 处理整个目录:
 
 ```sh
-doc2anki generate docs/ -p provider_name -o knowledge.apkg
+doc2anki generate docs/ -p provider_name -o output.apkg
 ```
 
 ### 命令行选项
@@ -135,10 +188,10 @@ doc2anki generate docs/ -p provider_name -o knowledge.apkg
 对于特殊文档结构，可手动指定分块级别：
 
 ```sh
-# 按二级标题分块
+# 按二级标题分块, 在 markdown 中即为 ##
 doc2anki generate input.md -p provider --chunk-level 2
 
-# 按三级标题分块，更细粒度
+# 按三级标题分块，在 markdown 中即为 ###
 doc2anki generate input.md -p provider --chunk-level 3
 ```
 
@@ -155,18 +208,17 @@ doc2anki generate input.md -p provider --chunk-level 3
 
 ## 文档格式
 
-### 全局上下文块
+### 全局上下文块 (❗deprecated)
 
 在文档开头定义领域术语，供语言模型生成卡片时参考。
 
 Markdown 格式:
 
-````markdown
+```
 ```context
 - TCP: "传输控制协议"
 - HTTP: "超文本传输协议"
 ```
-````
 
 Org-mode 格式:
 
