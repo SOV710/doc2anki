@@ -1,6 +1,7 @@
 """CLI interface for doc2anki."""
 
 import os
+from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import Optional
 
@@ -15,12 +16,36 @@ from .config import (
     fatal_exit,
 )
 
+
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        pkg_version = get_version("doc2anki")
+        print(f"doc2anki {pkg_version}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="doc2anki",
     help="Convert knowledge base documents to Anki flashcards",
     no_args_is_help=True,
 )
 console = Console()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "-v",
+        "--version",
+        help="Show version and exit",
+        callback=version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """doc2anki - Convert knowledge base documents to Anki flashcards."""
+    pass
 
 # Config file name
 CONFIG_FILENAME = "ai_providers.toml"

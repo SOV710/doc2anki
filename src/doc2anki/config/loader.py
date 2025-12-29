@@ -90,9 +90,10 @@ def _resolve_env_auth(provider_name: str, config: dict[str, Any]) -> ProviderCon
             f"'{config['api_key']}' not set or empty"
         )
 
+    # base_url field contains the env var name to look up
     base_url = None
-    if "base_url_env" in config:
-        base_url = os.getenv(config["base_url_env"])
+    if "base_url" in config:
+        base_url = os.getenv(config["base_url"])
     if not base_url:
         base_url = config.get("default_base_url")
     if not base_url:
@@ -101,9 +102,10 @@ def _resolve_env_auth(provider_name: str, config: dict[str, Any]) -> ProviderCon
             f"(env var not set and no default)"
         )
 
+    # model field contains the env var name to look up
     model = None
-    if "model_env" in config:
-        model = os.getenv(config["model_env"])
+    if "model" in config:
+        model = os.getenv(config["model"])
     if not model:
         model = config.get("default_model")
     if not model:
@@ -142,9 +144,10 @@ def _resolve_dotenv_auth(provider_name: str, config: dict[str, Any]) -> Provider
             f"not found in {dotenv_path}"
         )
 
+    # base_url field contains the key name to look up in dotenv
     base_url = None
-    if "base_url_key" in config:
-        base_url = os.getenv(config["base_url_key"])
+    if "base_url" in config:
+        base_url = os.getenv(config["base_url"])
     if not base_url:
         base_url = config.get("default_base_url")
     if not base_url:
@@ -153,9 +156,10 @@ def _resolve_dotenv_auth(provider_name: str, config: dict[str, Any]) -> Provider
             f"(not in dotenv and no default)"
         )
 
+    # model field contains the key name to look up in dotenv
     model = None
-    if "model_key" in config:
-        model = os.getenv(config["model_key"])
+    if "model" in config:
+        model = os.getenv(config["model"])
     if not model:
         model = config.get("default_model")
     if not model:
@@ -201,6 +205,53 @@ def get_provider_config(config_path: Path, provider_name: str) -> ProviderConfig
     return resolve_provider_config(provider_name, provider_config)
 
 
+def _resolve_display_values_env(config: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Resolve base_url and model for env auth type for display purposes."""
+    base_url = None
+    model = None
+
+    # base_url/model fields contain env var names
+    if "base_url" in config:
+        base_url = os.getenv(config["base_url"])
+    if not base_url:
+        base_url = config.get("default_base_url")
+
+    if "model" in config:
+        model = os.getenv(config["model"])
+    if not model:
+        model = config.get("default_model")
+
+    return base_url, model
+
+
+def _resolve_display_values_dotenv(
+    config: dict[str, Any],
+) -> tuple[str | None, str | None]:
+    """Resolve base_url and model for dotenv auth type for display purposes."""
+    base_url = None
+    model = None
+
+    # Try to load dotenv file if it exists
+    if "dotenv_path" in config:
+        dotenv_path = Path(config["dotenv_path"])
+        if dotenv_path.exists():
+            load_dotenv(dotenv_path, override=True)
+
+            # base_url/model fields contain key names in dotenv
+            if "base_url" in config:
+                base_url = os.getenv(config["base_url"])
+            if "model" in config:
+                model = os.getenv(config["model"])
+
+    # Fallback to defaults
+    if not base_url:
+        base_url = config.get("default_base_url")
+    if not model:
+        model = config.get("default_model")
+
+    return base_url, model
+
+
 def list_providers(config_path: Path, show_all: bool = False) -> list[ProviderInfo]:
     """
     List all providers from configuration.
@@ -225,16 +276,17 @@ def list_providers(config_path: Path, show_all: bool = False) -> list[ProviderIn
 
         auth_type = config.get("auth_type", "unknown")
 
-        # Try to get model info without resolving full config
+        # Resolve actual model and base_url values
         model = None
         base_url = None
 
         if auth_type == "direct":
             model = config.get("model")
             base_url = config.get("base_url")
-        elif auth_type in ("env", "dotenv"):
-            model = config.get("default_model")
-            base_url = config.get("default_base_url")
+        elif auth_type == "env":
+            base_url, model = _resolve_display_values_env(config)
+        elif auth_type == "dotenv":
+            base_url, model = _resolve_display_values_dotenv(config)
 
         providers.append(
             ProviderInfo(

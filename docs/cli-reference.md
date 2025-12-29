@@ -26,10 +26,29 @@ uv run doc2anki --help
 ```
 doc2anki [OPTIONS] COMMAND [ARGS]
 
+Options:
+  -v, --version  显示版本号并退出
+
 Commands:
   list      列出可用的 AI 提供商
   validate  验证配置文件
   generate  从文档生成 Anki 卡片
+```
+
+---
+
+## 全局选项
+
+| 选项 | 说明 |
+|-----|------|
+| `-v, --version` | 显示版本号并退出 |
+
+### 示例
+
+```sh
+# 显示版本号
+doc2anki --version
+doc2anki -v
 ```
 
 ---

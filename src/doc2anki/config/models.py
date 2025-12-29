@@ -27,11 +27,11 @@ class EnvAuthConfig(BaseModel):
 
     enable: bool = False
     auth_type: Literal["env"]
-    base_url_env: Optional[str] = None
-    model_env: Optional[str] = None
-    api_key: str  # Environment variable name containing the API key
-    default_base_url: Optional[str] = None
-    default_model: Optional[str] = None
+    base_url: str  # Environment variable name for base URL
+    model: str  # Environment variable name for model
+    api_key: str  # Environment variable name for API key
+    default_base_url: Optional[str] = None  # Fallback if env var not set
+    default_model: Optional[str] = None  # Fallback if env var not set
 
 
 class DotenvAuthConfig(BaseModel):
@@ -39,12 +39,12 @@ class DotenvAuthConfig(BaseModel):
 
     enable: bool = False
     auth_type: Literal["dotenv"]
-    dotenv_path: str
-    base_url_key: Optional[str] = None
-    model_key: Optional[str] = None
-    api_key: str  # Key name in the dotenv file containing the API key
-    default_base_url: Optional[str] = None
-    default_model: Optional[str] = None
+    dotenv_path: str  # Path to .env file
+    base_url: str  # Key name in .env file for base URL
+    model: str  # Key name in .env file for model
+    api_key: str  # Key name in .env file for API key
+    default_base_url: Optional[str] = None  # Fallback if key not in .env
+    default_model: Optional[str] = None  # Fallback if key not in .env
 
 
 class ProviderInfo(BaseModel):
