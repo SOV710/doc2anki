@@ -214,6 +214,8 @@ doc2anki generate input.md -p provider --chunk-level 3
 
 ### 全局上下文块 (❗deprecated)
 
+CONTEXT 块预期在 v0.2.0 版本完全被 interactive mode 取代
+
 在文档开头定义领域术语，供语言模型生成卡片时参考。
 
 Markdown 格式:
