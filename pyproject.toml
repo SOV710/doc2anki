@@ -1,6 +1,6 @@
 [project]
 name = "doc2anki"
-version = "0.1.2"
+version = "0.2.0"
 description = "Convert knowledge base documents to Anki flashcards"
 readme = "README.md"
 requires-python = ">=3.12"

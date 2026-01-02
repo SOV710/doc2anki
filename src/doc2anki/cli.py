@@ -272,6 +272,12 @@ def generate_cmd(
         "--dry-run",
         help="Parse and chunk only, don't call LLM",
     ),
+    interactive: bool = typer.Option(
+        False,
+        "-I",
+        "--interactive",
+        help="Interactively classify each chunk",
+    ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -352,6 +358,22 @@ def generate_cmd(
             console.print(f"[blue]Document tree:[/blue] {tree}")
             console.print(f"[blue]Chunk level:[/blue] {actual_level}")
 
+        # Interactive classification if requested
+        classified_nodes = None
+        if interactive:
+            from .pipeline import run_interactive_session
+
+            classified_nodes = run_interactive_session(
+                tree=tree,
+                level=actual_level,
+                console=console,
+                filename=str(file_path.name),
+            )
+
+            if not classified_nodes:
+                console.print(f"[yellow]No chunks to process for {file_path}[/yellow]")
+                continue
+
         # Process through pipeline
         try:
             chunk_contexts = process_pipeline(
@@ -360,6 +382,7 @@ def generate_cmd(
                 max_tokens=max_tokens,
                 global_context=global_context,
                 include_parent_chain=include_parent_chain,
+                classified_nodes=classified_nodes,
             )
         except Exception as e:
             fatal_exit(f"Failed to process pipeline for {file_path}: {e}")

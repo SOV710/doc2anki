@@ -91,6 +91,7 @@ def process_pipeline(
     max_tokens: int = 3000,
     global_context: Optional[dict[str, str]] = None,
     include_parent_chain: bool = True,
+    classified_nodes: Optional[list[ClassifiedNode]] = None,
 ) -> list[ChunkWithContext]:
     """
     Process a document tree through the chunking pipeline.
@@ -101,6 +102,7 @@ def process_pipeline(
         max_tokens: Maximum tokens per chunk (for auto-detection)
         global_context: Document-level context dict
         include_parent_chain: Whether to include heading hierarchy
+        classified_nodes: Pre-classified nodes (from interactive mode)
 
     Returns:
         List of ChunkWithContext objects ready for LLM processing
@@ -108,12 +110,16 @@ def process_pipeline(
     if global_context is None:
         global_context = {}
 
-    # Auto-detect level if not specified
-    if chunk_level is None:
-        chunk_level = auto_detect_level(tree, max_tokens)
+    # Use pre-classified nodes if provided (interactive mode)
+    if classified_nodes is not None:
+        classified = classified_nodes
+    else:
+        # Auto-detect level if not specified
+        if chunk_level is None:
+            chunk_level = auto_detect_level(tree, max_tokens)
 
-    # Classify nodes (v1: all CARD_ONLY)
-    classified = classify_nodes(tree, chunk_level)
+        # Classify nodes (default: all CARD_ONLY)
+        classified = classify_nodes(tree, chunk_level)
 
     # Process nodes and build ChunkWithContext objects
     accumulated_ctx = ""
