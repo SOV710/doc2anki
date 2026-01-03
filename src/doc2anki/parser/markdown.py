@@ -29,6 +29,8 @@ class MarkdownParser(BaseParser):
         """
         Extract context block from Markdown content.
 
+        NOTE: this is gonna deprecated!!! we don't use any ```context anymore!
+
         Looks for fenced code block with 'context' language:
         ```context
         - Term: "Definition"

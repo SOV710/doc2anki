@@ -25,6 +25,7 @@ doc2anki = "doc2anki.cli:app"
 
 [dependency-groups]
 dev = [
+  "debugpy>=1.8.19",
   "pytest>=9.0.2",
 ]
 
