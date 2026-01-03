@@ -1,61 +1,55 @@
 """Document parsing module for doc2anki."""
 
 from pathlib import Path
+import re
 
-from .base import ParseResult
+from .tree import HeadingNode, DocumentTree
+from .metadata import DocumentMetadata
+from .builder import TreeBuilder
 from .markdown import MarkdownParser
 from .markdown import build_tree as build_markdown_tree
-from .orgmode import OrgModeParser
+from .orgmode import OrgParser
 from .orgmode import build_tree as build_org_tree
 from .chunker import chunk_document, count_tokens, ChunkingError
-from .tree import HeadingNode, DocumentTree
 
 
-def parse_document(file_path: Path) -> tuple[dict[str, str], str]:
+def build_document_tree(source: str | Path, format: str | None = None) -> DocumentTree:
     """
-    Parse a document file and extract global context and content.
+    Build a DocumentTree from document content or file.
 
     Args:
-        file_path: Path to the document file (.md or .org)
+        source: Document content string or Path to file
+        format: Document format ("markdown" or "org").
+                If None, auto-detect from file extension or content.
 
     Returns:
-        Tuple of (global_context dict, content string)
+        Immutable DocumentTree with parsed heading hierarchy and metadata
 
     Raises:
-        ValueError: If file format is not supported
+        ValueError: If format is not supported or cannot be detected
     """
-    file_path = Path(file_path)
-    suffix = file_path.suffix.lower()
+    # Determine format
+    if format is None:
+        if isinstance(source, Path):
+            suffix = source.suffix.lower()
+            if suffix == ".md":
+                format = "markdown"
+            elif suffix == ".org":
+                format = "org"
+            else:
+                # Try to detect from content
+                content = source.read_text(encoding="utf-8")
+                format = detect_format(content)
+        else:
+            format = detect_format(source)
 
-    if suffix == ".md":
-        parser = MarkdownParser()
-    elif suffix == ".org":
-        parser = OrgModeParser()
-    else:
-        raise ValueError(f"Unsupported file format: {suffix}. Supported: .md, .org")
-
-    result = parser.parse(file_path)
-    return result.global_context, result.content
-
-
-def build_document_tree(content: str, format: str = "markdown") -> DocumentTree:
-    """
-    Build a DocumentTree from document content.
-
-    Args:
-        content: Document content string
-        format: Document format ("markdown" or "org")
-
-    Returns:
-        DocumentTree with parsed heading hierarchy
-
-    Raises:
-        ValueError: If format is not supported
-    """
+    # Parse based on format
     if format in ("markdown", "md"):
-        return build_markdown_tree(content)
+        parser = MarkdownParser()
+        return parser.parse(source)
     elif format in ("org", "orgmode"):
-        return build_org_tree(content)
+        parser = OrgParser()
+        return parser.parse(source)
     else:
         raise ValueError(f"Unsupported format: {format}. Supported: markdown, org")
 
@@ -66,8 +60,6 @@ def detect_format(content: str) -> str:
 
     Returns "markdown" or "org" based on heading patterns.
     """
-    import re
-
     md_headings = len(re.findall(r"^#{1,6}\s+.+$", content, re.MULTILINE))
     org_headings = len(re.findall(r"^\*+\s+.+$", content, re.MULTILINE))
 
@@ -75,15 +67,19 @@ def detect_format(content: str) -> str:
 
 
 __all__ = [
-    "parse_document",
+    # Core types
+    "HeadingNode",
+    "DocumentTree",
+    "DocumentMetadata",
+    "TreeBuilder",
+    # Parsers
+    "MarkdownParser",
+    "OrgParser",
+    # Functions
     "build_document_tree",
     "detect_format",
+    # Chunking
     "chunk_document",
     "count_tokens",
     "ChunkingError",
-    "ParseResult",
-    "MarkdownParser",
-    "OrgModeParser",
-    "HeadingNode",
-    "DocumentTree",
 ]

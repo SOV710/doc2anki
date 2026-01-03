@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from doc2anki.parser.metadata import DocumentMetadata
+
 
 @dataclass
 class ChunkWithContext:
@@ -11,14 +13,14 @@ class ChunkWithContext:
     This is the final form before sending to the LLM API.
     """
 
-    # Original document-level context (from context blocks)
-    global_context: dict[str, str] = field(default_factory=dict)
+    # Document metadata (from frontmatter/properties)
+    metadata: DocumentMetadata = field(default_factory=DocumentMetadata.empty)
 
     # Accumulated context from previous FULL/CONTEXT_ONLY chunks
     accumulated_context: str = ""
 
-    # Heading hierarchy for this chunk
-    parent_chain: list[str] = field(default_factory=list)
+    # Heading hierarchy for this chunk (immutable tuple)
+    parent_chain: tuple[str, ...] = ()
 
     # The actual chunk content
     chunk_content: str = ""
@@ -27,15 +29,15 @@ class ChunkWithContext:
         """
         Get the full context string for the LLM prompt.
 
-        Returns formatted context including global and accumulated.
+        Returns formatted context including metadata and accumulated context.
         """
         parts = []
 
-        # Global context (definitions, terms)
-        if self.global_context:
-            parts.append("## Global Context")
-            for term, definition in self.global_context.items():
-                parts.append(f"- **{term}**: {definition}")
+        # Document metadata
+        if self.metadata.raw_data:
+            parts.append("## Document Metadata")
+            for key, value in self.metadata.raw_data.items():
+                parts.append(f"- **{key}**: {value}")
             parts.append("")
 
         # Accumulated context from previous chunks

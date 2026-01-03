@@ -1,33 +1,39 @@
-"""Document tree structure for hierarchical parsing."""
+"""Immutable document tree structure for hierarchical parsing."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterator
 
+from .metadata import DocumentMetadata
 
-@dataclass
+
+@dataclass(frozen=True, slots=True)
 class HeadingNode:
     """
-    AST node representing a heading and its content.
+    Immutable AST node representing a heading and its content.
 
-    A HeadingNode represents a section in the document, containing:
-    - The heading level (1-6 for Markdown, 1-N for Org-mode)
-    - The heading title text
-    - The content directly under this heading (excluding children)
-    - Child nodes for nested sub-headings
+    All fields are immutable:
+    - level, title, content are primitives/strings
+    - children is a tuple (immutable sequence)
+    - parent_titles provides hierarchy without mutable parent reference
     """
 
     level: int
     title: str
     content: str = ""
-    children: list[HeadingNode] = field(default_factory=list)
-    _parent: HeadingNode | None = field(default=None, repr=False)
+    children: tuple[HeadingNode, ...] = ()
+    parent_titles: tuple[str, ...] = ()
 
-    def add_child(self, child: HeadingNode) -> None:
-        """Add a child node."""
-        child._parent = self
-        self.children.append(child)
+    @property
+    def path(self) -> tuple[str, ...]:
+        """Heading hierarchy as immutable tuple of titles."""
+        return (*self.parent_titles, self.title)
+
+    @property
+    def depth(self) -> int:
+        """Depth in tree (0 for top-level nodes)."""
+        return len(self.parent_titles)
 
     @property
     def full_content(self) -> str:
@@ -35,6 +41,7 @@ class HeadingNode:
         Get content including all descendants.
 
         Returns the heading line, content, and recursively all children.
+        Computed on-demand, not stored.
         """
         parts = []
 
@@ -52,53 +59,43 @@ class HeadingNode:
 
         return "\n\n".join(parts)
 
-    @property
-    def path(self) -> list[str]:
-        """
-        Get heading hierarchy as a list of titles.
-
-        Returns list from root to this node, e.g., ["Network", "TCP", "Handshake"]
-        """
-        if self._parent is None:
-            return [self.title]
-        return self._parent.path + [self.title]
-
-    @property
-    def depth(self) -> int:
-        """Get depth in tree (0 for root)."""
-        if self._parent is None:
-            return 0
-        return self._parent.depth + 1
-
     def iter_descendants(self) -> Iterator[HeadingNode]:
         """Iterate over all descendant nodes (depth-first)."""
         for child in self.children:
             yield child
             yield from child.iter_descendants()
 
+    def with_children(self, children: tuple[HeadingNode, ...]) -> HeadingNode:
+        """Create a new node with updated children (structural sharing)."""
+        return HeadingNode(
+            level=self.level,
+            title=self.title,
+            content=self.content,
+            children=children,
+            parent_titles=self.parent_titles,
+        )
+
     def __repr__(self) -> str:
         return f"HeadingNode(level={self.level}, title={self.title!r}, children={len(self.children)})"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class DocumentTree:
     """
-    Tree structure representing a parsed document.
+    Immutable tree structure representing a parsed document.
 
-    The tree has a virtual root that contains all top-level headings.
+    Supports:
+    - Structural sharing for efficient transformations
+    - Thread-safe concurrent access
+    - Potential undo/redo via tree diffing
     """
 
-    # Top-level heading nodes
-    children: list[HeadingNode] = field(default_factory=list)
-
-    # Optional: content before any headings
+    children: tuple[HeadingNode, ...] = ()
     preamble: str = ""
+    metadata: DocumentMetadata = field(default_factory=DocumentMetadata.empty)
+    source_format: str = "markdown"
 
-    def add_child(self, child: HeadingNode) -> None:
-        """Add a top-level heading node."""
-        self.children.append(child)
-
-    def get_nodes_at_level(self, level: int) -> list[HeadingNode]:
+    def get_nodes_at_level(self, level: int) -> tuple[HeadingNode, ...]:
         """
         Get all nodes at a specific heading level.
 
@@ -106,30 +103,30 @@ class DocumentTree:
             level: Heading level (1-6)
 
         Returns:
-            List of HeadingNode objects at that level
+            Tuple of HeadingNode objects at that level
         """
-        result = []
+        result: list[HeadingNode] = []
 
-        def collect(nodes: list[HeadingNode]) -> None:
+        def collect(nodes: tuple[HeadingNode, ...]) -> None:
             for node in nodes:
                 if node.level == level:
                     result.append(node)
                 collect(node.children)
 
         collect(self.children)
-        return result
+        return tuple(result)
 
-    def get_all_levels(self) -> set[int]:
-        """Get all heading levels present in the document."""
-        levels = set()
+    def get_all_levels(self) -> frozenset[int]:
+        """Get all heading levels present in the document (immutable)."""
+        levels: set[int] = set()
 
-        def collect(nodes: list[HeadingNode]) -> None:
+        def collect(nodes: tuple[HeadingNode, ...]) -> None:
             for node in nodes:
                 levels.add(node.level)
                 collect(node.children)
 
         collect(self.children)
-        return levels
+        return frozenset(levels)
 
     @property
     def max_level(self) -> int:
@@ -150,4 +147,4 @@ class DocumentTree:
             yield from child.iter_descendants()
 
     def __repr__(self) -> str:
-        return f"DocumentTree(children={len(self.children)}, levels={self.get_all_levels()})"
+        return f"DocumentTree(children={len(self.children)}, levels={set(self.get_all_levels())})"

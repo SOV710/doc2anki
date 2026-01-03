@@ -1,9 +1,10 @@
+#+TITLE: 数据结构基础
+#+AUTHOR: test
+#+FILETAGS: :datastructure:algorithms:
+
 * 数据结构基础
 
-#+BEGIN_CONTEXT
-- 时间复杂度: "算法执行时间随输入规模增长的变化趋势"
-- 空间复杂度: "算法执行过程中所需存储空间随输入规模增长的变化趋势"
-#+END_CONTEXT
+本文介绍常见数据结构的基础知识。
 
 ** 数组
 

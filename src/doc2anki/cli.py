@@ -286,7 +286,7 @@ def generate_cmd(
 ) -> None:
     """Generate Anki cards from documents."""
     # Import parser here to avoid circular imports and speed up CLI startup
-    from .parser import parse_document, build_document_tree, detect_format
+    from .parser import build_document_tree
     from .pipeline import process_pipeline, auto_detect_level
 
     # Validate input path
@@ -329,25 +329,17 @@ def generate_cmd(
         if verbose:
             console.print(f"\n[blue]Processing:[/blue] {file_path}")
 
-        # Parse document
+        # Build document tree (includes metadata extraction)
         try:
-            global_context, content = parse_document(file_path)
+            tree = build_document_tree(file_path)
         except Exception as e:
             fatal_exit(f"Failed to parse {file_path}: {e}")
             return
 
-        if verbose and global_context:
-            console.print(f"[blue]Global context:[/blue] {len(global_context)} items")
-            for term, definition in global_context.items():
-                console.print(f"  - {term}: {definition}")
-
-        # Build document tree
-        try:
-            doc_format = "org" if file_path.suffix.lower() == ".org" else "markdown"
-            tree = build_document_tree(content, doc_format)
-        except Exception as e:
-            fatal_exit(f"Failed to build document tree for {file_path}: {e}")
-            return
+        if verbose and tree.metadata.raw_data:
+            console.print(f"[blue]Metadata:[/blue] {len(tree.metadata.raw_data)} items")
+            for key, value in tree.metadata.raw_data.items():
+                console.print(f"  - {key}: {value}")
 
         # Determine chunk level
         actual_level = chunk_level
@@ -380,7 +372,6 @@ def generate_cmd(
                 tree=tree,
                 chunk_level=actual_level,
                 max_tokens=max_tokens,
-                global_context=global_context,
                 include_parent_chain=include_parent_chain,
                 classified_nodes=classified_nodes,
             )
@@ -398,7 +389,7 @@ def generate_cmd(
 
         if dry_run:
             console.print(f"\n[green]Dry run complete for {file_path}[/green]")
-            console.print(f"  Global context items: {len(global_context)}")
+            console.print(f"  Metadata items: {len(tree.metadata.raw_data)}")
             console.print(f"  Chunks: {len(chunk_contexts)}")
             continue
 
@@ -418,13 +409,13 @@ def generate_cmd(
 
                 chunk_cards = generate_cards_for_chunk(
                     chunk=ctx.chunk_content,
-                    global_context=ctx.global_context,
+                    global_context=dict(ctx.metadata.raw_data) if ctx.metadata.raw_data else {},
                     client=client,
                     model=provider_config.model,
                     template=template,
                     max_retries=max_retries,
                     verbose=verbose,
-                    parent_chain=ctx.parent_chain if include_parent_chain else None,
+                    parent_chain=list(ctx.parent_chain) if include_parent_chain else None,
                 )
                 cards.extend(chunk_cards)
 

@@ -1,10 +1,14 @@
+---
+title: TCP/IP 基础
+author: test
+tags:
+  - networking
+  - tcp
+---
+
 # TCP/IP 基础
 
-```context
-- TCP: "传输控制协议，面向连接的可靠传输协议"
-- IP: "网际协议，负责数据包的路由和寻址"
-- 三次握手: "TCP 建立连接的过程"
-```
+本文介绍 TCP/IP 协议的基础知识。
 
 ## 三次握手
 

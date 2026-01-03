@@ -1,235 +1,143 @@
-"""Org-mode document parser."""
+"""Org-mode document parser using orgparse."""
 
-import re
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
+import re
 
 import orgparse
+from orgparse.node import OrgNode, OrgRootNode
 
-from .base import BaseParser, ParseResult, parse_context_yaml
-from .tree import HeadingNode, DocumentTree
+from .tree import DocumentTree
+from .metadata import DocumentMetadata
+from .builder import TreeBuilder
 
 
-class OrgModeParser(BaseParser):
-    """Parser for Org-mode documents."""
+class OrgParser:
+    """
+    Org-mode parser using orgparse library.
 
-    def parse(self, file_path: Path) -> ParseResult:
-        """Parse an Org-mode document."""
-        content = file_path.read_text(encoding="utf-8")
-        global_context, remaining = self.extract_context_block(content)
+    Extracts:
+    - Document structure (headings, content)
+    - File-level #+PROPERTY declarations
+    - Node-level :PROPERTIES: drawers
+    """
 
-        return ParseResult(
-            global_context=global_context,
-            content=remaining,
+    def parse(self, source: str | Path) -> DocumentTree:
+        """
+        Parse Org-mode content or file to DocumentTree.
+
+        Args:
+            source: Org-mode string or Path to .org file
+
+        Returns:
+            Immutable DocumentTree
+        """
+        if isinstance(source, Path):
+            root = orgparse.load(str(source))
+            content = source.read_text(encoding="utf-8")
+        else:
+            root = orgparse.loads(source)
+            content = source
+
+        # Extract file-level metadata
+        metadata = self._extract_metadata(root, content)
+
+        # Build document tree
+        return self._build_tree(root, metadata)
+
+    def _extract_metadata(
+        self, root: OrgRootNode, content: str
+    ) -> DocumentMetadata:
+        """
+        Extract document-level metadata.
+
+        Sources:
+        - #+TITLE, #+AUTHOR, #+DATE etc. (file-level keywords)
+        - Properties from root node if any
+        """
+        raw_data: dict[str, Any] = {}
+
+        # Extract #+KEYWORD declarations from content
+        keyword_pattern = r"^#\+(\w+):\s*(.+)$"
+        for match in re.finditer(keyword_pattern, content, re.MULTILINE):
+            key = match.group(1).lower()
+            value = match.group(2).strip()
+            raw_data[key] = value
+
+        # Extract root node properties (if any)
+        if hasattr(root, "properties") and root.properties:
+            for key, value in root.properties.items():
+                raw_data[key.lower()] = value
+
+        # Parse filetags
+        tags: tuple[str, ...] = ()
+        if "filetags" in raw_data:
+            filetags = raw_data["filetags"]
+            # Org filetags format: :tag1:tag2:tag3:
+            tags = tuple(t for t in filetags.split(":") if t)
+
+        return DocumentMetadata(
+            title=raw_data.get("title"),
+            author=raw_data.get("author"),
+            date=raw_data.get("date"),
+            tags=tags,
+            raw_data=raw_data,
+            source_format="org",
         )
 
-    def extract_context_block(self, content: str) -> tuple[dict[str, str], str]:
-        """
-        Extract context block from Org-mode content.
+    def _build_tree(
+        self, root: OrgRootNode, metadata: DocumentMetadata
+    ) -> DocumentTree:
+        """Build DocumentTree from orgparse AST."""
+        builder = TreeBuilder(source_format="org")
+        builder.set_metadata(metadata)
 
-        Looks for special block:
-        #+BEGIN_CONTEXT
-        - Term: "Definition"
-        #+END_CONTEXT
-        """
-        # Pattern for context special block (case-insensitive)
-        pattern = r"^\s*#\+BEGIN_CONTEXT\s*\n(.*?)\n\s*#\+END_CONTEXT\s*$"
+        # Handle preamble (content before first heading)
+        # orgparse stores this in root.body
+        if hasattr(root, "body") and root.body:
+            # Filter out #+KEYWORD lines from preamble
+            preamble_lines = []
+            for line in root.body.split("\n"):
+                if not line.strip().startswith("#+"):
+                    preamble_lines.append(line)
+            preamble = "\n".join(preamble_lines).strip()
+            if preamble:
+                builder.set_preamble(preamble)
 
-        match = re.search(pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        def process_node(node: OrgNode) -> None:
+            """Process orgparse node recursively."""
+            # orgparse node levels are 1-indexed
+            level = node.level
 
-        if not match:
-            return {}, content
+            if level > 0:  # Skip root node (level 0)
+                builder.add_heading(level, node.heading)
 
-        context_content = match.group(1)
-        global_context = parse_context_yaml(context_content)
+                # Add node body content
+                if node.body:
+                    builder.add_content(node.body.strip())
 
-        # Remove the context block from content
-        remaining = content[: match.start()] + content[match.end() :]
-        # Clean up extra blank lines
-        remaining = re.sub(r"\n{3,}", "\n\n", remaining)
+            # Process children
+            for child in node.children:
+                process_node(child)
 
-        return global_context, remaining.strip()
+        # Process all children of root
+        for child in root.children:
+            process_node(child)
 
-
-def extract_org_sections(content: str) -> list[tuple[int, str, str]]:
-    """
-    Extract headings and their sections from Org-mode content.
-
-    Returns list of (level, heading_text, section_content) tuples.
-    """
-    # Pattern for org headings (* Heading, ** Subheading, etc.)
-    heading_pattern = r"^(\*+)\s+(.+?)$"
-
-    lines = content.split("\n")
-    sections = []
-    current_level = 0
-    current_heading = ""
-    current_content = []
-    in_block = False
-
-    for line in lines:
-        # Track blocks to avoid matching headings inside them
-        if re.match(r"^\s*#\+BEGIN_", line, re.IGNORECASE):
-            in_block = True
-        elif re.match(r"^\s*#\+END_", line, re.IGNORECASE):
-            in_block = False
-
-        if in_block:
-            current_content.append(line)
-            continue
-
-        match = re.match(heading_pattern, line)
-        if match:
-            # Save previous section
-            if current_heading or current_content:
-                sections.append(
-                    (current_level, current_heading, "\n".join(current_content).strip())
-                )
-
-            # Start new section
-            current_level = len(match.group(1))
-            current_heading = match.group(2).strip()
-            current_content = [line]  # Include the heading in content
-        else:
-            current_content.append(line)
-
-    # Don't forget the last section
-    if current_heading or current_content:
-        sections.append(
-            (current_level, current_heading, "\n".join(current_content).strip())
-        )
-
-    return sections
-
-
-def split_org_by_top_headings(content: str) -> list[str]:
-    """
-    Split Org-mode content by top-level headings.
-
-    If document has * headings, split by *.
-    If no * but has **, split by **.
-    And so on.
-
-    Returns list of content chunks, each starting with its heading.
-    """
-    sections = extract_org_sections(content)
-
-    if not sections:
-        return [content] if content.strip() else []
-
-    # Find the minimum (top) heading level
-    heading_levels = [level for level, heading, _ in sections if heading]
-    if not heading_levels:
-        return [content] if content.strip() else []
-
-    top_level = min(heading_levels)
-
-    # Group sections by top-level headings
-    chunks = []
-    current_chunk = []
-
-    for level, heading, section_content in sections:
-        if level == top_level and heading:
-            # Start new chunk
-            if current_chunk:
-                chunks.append("\n\n".join(current_chunk))
-            current_chunk = [section_content]
-        else:
-            current_chunk.append(section_content)
-
-    # Don't forget the last chunk
-    if current_chunk:
-        chunks.append("\n\n".join(current_chunk))
-
-    return [c for c in chunks if c.strip()]
+        return builder.build()
 
 
 def build_tree(content: str) -> DocumentTree:
     """
-    Build a DocumentTree from Org-mode content.
-
-    Parses the content and creates a hierarchical tree structure
-    based on heading levels.
+    Convenience function to build tree from Org-mode content.
 
     Args:
         content: Org-mode content string
 
     Returns:
-        DocumentTree with parsed heading hierarchy
+        Immutable DocumentTree
     """
-    tree = DocumentTree()
-    heading_pattern = r"^(\*+)\s+(.+?)$"
-
-    lines = content.split("\n")
-    in_block = False
-
-    # Stack to track parent nodes: [(level, node), ...]
-    stack: list[tuple[int, HeadingNode]] = []
-
-    # Content accumulator for the current section
-    current_content_lines: list[str] = []
-
-    # Track content before any heading (preamble)
-    preamble_lines: list[str] = []
-    found_first_heading = False
-
-    def flush_content() -> None:
-        """Flush accumulated content to the current node."""
-        nonlocal current_content_lines
-        if not stack:
-            return
-        content_str = "\n".join(current_content_lines).strip()
-        if content_str:
-            stack[-1][1].content = content_str
-        current_content_lines = []
-
-    for line in lines:
-        # Track blocks to avoid matching headings inside them
-        if re.match(r"^\s*#\+BEGIN_", line, re.IGNORECASE):
-            in_block = True
-        elif re.match(r"^\s*#\+END_", line, re.IGNORECASE):
-            in_block = False
-
-        if in_block:
-            if found_first_heading:
-                current_content_lines.append(line)
-            else:
-                preamble_lines.append(line)
-            continue
-
-        match = re.match(heading_pattern, line)
-        if match:
-            # Save content of previous section
-            flush_content()
-
-            found_first_heading = True
-            level = len(match.group(1))
-            title = match.group(2).strip()
-
-            # Create new node
-            node = HeadingNode(level=level, title=title)
-
-            # Find parent: pop stack until we find a lower level
-            while stack and stack[-1][0] >= level:
-                stack.pop()
-
-            # Add to parent or tree root
-            if stack:
-                stack[-1][1].add_child(node)
-            else:
-                tree.add_child(node)
-
-            # Push to stack
-            stack.append((level, node))
-        else:
-            if found_first_heading:
-                current_content_lines.append(line)
-            else:
-                preamble_lines.append(line)
-
-    # Flush any remaining content
-    flush_content()
-
-    # Set preamble
-    tree.preamble = "\n".join(preamble_lines).strip()
-
-    return tree
+    parser = OrgParser()
+    return parser.parse(content)

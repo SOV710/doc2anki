@@ -46,7 +46,7 @@ def auto_detect_level(tree: DocumentTree, max_tokens: int = 3000) -> int:
 
         # Variance check: if std_dev > 0.5 * avg, distribution is too uneven
         variance = sum((t - avg_tokens) ** 2 for t in token_counts) / len(token_counts)
-        std_dev = variance ** 0.5
+        std_dev = variance**0.5
         if std_dev > 0.5 * avg_tokens:
             continue  # Too uneven, try deeper level
 
@@ -89,7 +89,6 @@ def process_pipeline(
     tree: DocumentTree,
     chunk_level: Optional[int] = None,
     max_tokens: int = 3000,
-    global_context: Optional[dict[str, str]] = None,
     include_parent_chain: bool = True,
     classified_nodes: Optional[list[ClassifiedNode]] = None,
 ) -> list[ChunkWithContext]:
@@ -100,16 +99,12 @@ def process_pipeline(
         tree: DocumentTree to process
         chunk_level: Heading level to chunk at (None for auto)
         max_tokens: Maximum tokens per chunk (for auto-detection)
-        global_context: Document-level context dict
         include_parent_chain: Whether to include heading hierarchy
         classified_nodes: Pre-classified nodes (from interactive mode)
 
     Returns:
         List of ChunkWithContext objects ready for LLM processing
     """
-    if global_context is None:
-        global_context = {}
-
     # Use pre-classified nodes if provided (interactive mode)
     if classified_nodes is not None:
         classified = classified_nodes
@@ -132,9 +127,9 @@ def process_pipeline(
         # For nodes that generate cards, create ChunkWithContext
         if cn.should_generate_cards:
             chunk_ctx = ChunkWithContext(
-                global_context=global_context,
+                metadata=tree.metadata,
                 accumulated_context=accumulated_ctx,
-                parent_chain=cn.node.path if include_parent_chain else [],
+                parent_chain=cn.node.path if include_parent_chain else (),
                 chunk_content=cn.node.full_content,
             )
             result.append(chunk_ctx)
