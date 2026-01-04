@@ -1,65 +1,151 @@
 """Pipeline processor for document chunking and processing."""
 
+from dataclasses import dataclass
 from typing import Optional
 
 from doc2anki.parser.tree import DocumentTree, HeadingNode
 from doc2anki.parser.chunker import count_tokens
+from doc2anki.parser.metadata import DocumentMetadata
 
 from .classifier import ChunkType, ClassifiedNode
 from .context import ChunkWithContext
 
 
-def auto_detect_level(tree: DocumentTree, max_tokens: int = 3000) -> int:
+@dataclass
+class ContentBlock:
+    """文档中的一个内容块（heading + 其直接 content）"""
+
+    level: int  # heading 级别 (0 = preamble)
+    heading: str  # heading 行，preamble 为空
+    content: str  # 直接内容（不含子节点）
+    path: tuple[str, ...]  # 祖先路径
+
+    def to_text(self) -> str:
+        """转换为文本"""
+        parts = []
+        if self.heading:
+            parts.append(self.heading)
+        if self.content.strip():
+            parts.append(self.content.strip())
+        return "\n\n".join(parts)
+
+
+def flatten_tree(tree: DocumentTree) -> list[ContentBlock]:
     """
-    Automatically detect the optimal heading level for chunking.
+    将 DocumentTree 展平为线性内容块序列。
 
-    Pure local heuristics - zero API cost.
-
-    Strategy:
-    1. Count nodes at each heading level
-    2. Estimate average tokens per node at each level
-    3. Check variance - if too high, go deeper
-    4. Choose level that produces:
-       - At least 2 chunks
-       - Average chunk size between 500-2500 tokens
-       - Reasonably balanced distribution (low variance)
+    按文档顺序输出：
+    1. Preamble（如果有）
+    2. 每个 heading 及其直接 content（深度优先）
 
     Args:
-        tree: DocumentTree to analyze
-        max_tokens: Maximum tokens per chunk
+        tree: DocumentTree to flatten
 
     Returns:
-        Recommended heading level for chunking
+        List of ContentBlock in document order
     """
-    levels = sorted(tree.get_all_levels())
+    blocks: list[ContentBlock] = []
 
-    if not levels:
-        return 1
+    # 1. Preamble
+    if tree.preamble.strip():
+        blocks.append(
+            ContentBlock(
+                level=0,
+                heading="",
+                content=tree.preamble.strip(),
+                path=(),
+            )
+        )
 
-    for level in levels:
-        nodes = tree.get_nodes_at_level(level)
-        if len(nodes) < 2:
-            continue
+    # 2. 递归展平所有节点
+    def flatten_node(node: HeadingNode) -> None:
+        heading_line = "#" * node.level + " " + node.title
+        blocks.append(
+            ContentBlock(
+                level=node.level,
+                heading=heading_line,
+                content=node.content,  # 只取直接 content，不递归
+                path=node.path,
+            )
+        )
+        # 递归子节点
+        for child in node.children:
+            flatten_node(child)
 
-        token_counts = [count_tokens(n.full_content) for n in nodes]
-        avg_tokens = sum(token_counts) / len(token_counts)
+    for child in tree.children:
+        flatten_node(child)
 
-        # Variance check: if std_dev > 0.5 * avg, distribution is too uneven
-        variance = sum((t - avg_tokens) ** 2 for t in token_counts) / len(token_counts)
-        std_dev = variance**0.5
-        if std_dev > 0.5 * avg_tokens:
-            continue  # Too uneven, try deeper level
+    return blocks
 
-        if 500 <= avg_tokens <= max_tokens * 0.8:
-            return level
 
-    # Fallback: deepest level with multiple nodes
-    for level in reversed(levels):
-        if len(tree.get_nodes_at_level(level)) >= 2:
-            return level
+def greedy_chunk(
+    blocks: list[ContentBlock],
+    max_tokens: int,
+    metadata: DocumentMetadata,
+) -> list[ChunkWithContext]:
+    """
+    贪婪合并内容块直到接近 max_tokens。
 
-    # Ultimate fallback
-    return levels[0] if levels else 1
+    策略：
+    - 从头开始累积
+    - 当下一个块会超过 max_tokens 时，切分
+    - 每个 chunk 尽可能大
+
+    Args:
+        blocks: List of ContentBlock to merge
+        max_tokens: Maximum tokens per chunk
+        metadata: Document metadata
+
+    Returns:
+        List of ChunkWithContext objects
+    """
+    if not blocks:
+        return []
+
+    result: list[ChunkWithContext] = []
+    current_blocks: list[ContentBlock] = []
+    current_tokens = 0
+
+    for block in blocks:
+        block_text = block.to_text()
+        block_tokens = count_tokens(block_text)
+
+        # 检查是否需要切分
+        if current_blocks and current_tokens + block_tokens > max_tokens:
+            # 保存当前 chunk
+            chunk_content = "\n\n".join(b.to_text() for b in current_blocks)
+            # 使用第一个非空 path 或第一个 block 的 path
+            first_path = next((b.path for b in current_blocks if b.path), ())
+            result.append(
+                ChunkWithContext(
+                    metadata=metadata,
+                    accumulated_context="",
+                    parent_chain=first_path,
+                    chunk_content=chunk_content,
+                )
+            )
+            # 重置
+            current_blocks = []
+            current_tokens = 0
+
+        # 添加当前 block
+        current_blocks.append(block)
+        current_tokens += block_tokens
+
+    # 保存最后一个 chunk
+    if current_blocks:
+        chunk_content = "\n\n".join(b.to_text() for b in current_blocks)
+        first_path = next((b.path for b in current_blocks if b.path), ())
+        result.append(
+            ChunkWithContext(
+                metadata=metadata,
+                accumulated_context="",
+                parent_chain=first_path,
+                chunk_content=chunk_content,
+            )
+        )
+
+    return result
 
 
 def classify_nodes(
@@ -68,14 +154,13 @@ def classify_nodes(
     default_type: ChunkType = ChunkType.CARD_ONLY,
 ) -> list[ClassifiedNode]:
     """
-    Classify all nodes at a given level.
+    Classify nodes for chunking at a given level.
 
-    In v1, all nodes get the same default type (CARD_ONLY).
-    Future versions may support interactive classification.
+    Used by interactive mode only.
 
     Args:
         tree: DocumentTree to process
-        level: Heading level to extract
+        level: Heading level to chunk at
         default_type: Default ChunkType for all nodes
 
     Returns:
@@ -85,42 +170,28 @@ def classify_nodes(
     return [ClassifiedNode(node=n, chunk_type=default_type) for n in nodes]
 
 
-def process_pipeline(
+def _process_with_classified_nodes(
     tree: DocumentTree,
-    chunk_level: Optional[int] = None,
-    max_tokens: int = 3000,
-    include_parent_chain: bool = True,
-    classified_nodes: Optional[list[ClassifiedNode]] = None,
+    classified_nodes: list[ClassifiedNode],
+    max_tokens: int,
+    include_parent_chain: bool,
 ) -> list[ChunkWithContext]:
     """
-    Process a document tree through the chunking pipeline.
+    Process pre-classified nodes (interactive mode).
 
     Args:
-        tree: DocumentTree to process
-        chunk_level: Heading level to chunk at (None for auto)
-        max_tokens: Maximum tokens per chunk (for auto-detection)
+        tree: DocumentTree
+        classified_nodes: Pre-classified nodes
+        max_tokens: Maximum tokens per chunk
         include_parent_chain: Whether to include heading hierarchy
-        classified_nodes: Pre-classified nodes (from interactive mode)
 
     Returns:
-        List of ChunkWithContext objects ready for LLM processing
+        List of ChunkWithContext objects
     """
-    # Use pre-classified nodes if provided (interactive mode)
-    if classified_nodes is not None:
-        classified = classified_nodes
-    else:
-        # Auto-detect level if not specified
-        if chunk_level is None:
-            chunk_level = auto_detect_level(tree, max_tokens)
-
-        # Classify nodes (default: all CARD_ONLY)
-        classified = classify_nodes(tree, chunk_level)
-
-    # Process nodes and build ChunkWithContext objects
     accumulated_ctx = ""
     result: list[ChunkWithContext] = []
 
-    for cn in classified:
+    for cn in classified_nodes:
         if cn.chunk_type == ChunkType.SKIP:
             continue
 
@@ -139,3 +210,37 @@ def process_pipeline(
             accumulated_ctx += f"\n\n{cn.node.full_content}"
 
     return result
+
+
+def process_pipeline(
+    tree: DocumentTree,
+    max_tokens: int = 3000,
+    include_parent_chain: bool = True,
+    classified_nodes: Optional[list[ClassifiedNode]] = None,
+) -> list[ChunkWithContext]:
+    """
+    Process a document tree through the chunking pipeline.
+
+    策略：展平 + 贪婪合并
+    - 无损：所有内容都被包含
+    - 有序：保持文档原始顺序
+    - 智能：在 token 边界切分
+
+    Args:
+        tree: DocumentTree to process
+        max_tokens: Maximum tokens per chunk
+        include_parent_chain: Whether to include heading hierarchy
+        classified_nodes: Pre-classified nodes (from interactive mode)
+
+    Returns:
+        List of ChunkWithContext objects ready for LLM processing
+    """
+    # 交互模式：使用预分类节点
+    if classified_nodes is not None:
+        return _process_with_classified_nodes(
+            tree, classified_nodes, max_tokens, include_parent_chain
+        )
+
+    # 新逻辑：展平 + 贪婪合并
+    blocks = flatten_tree(tree)
+    return greedy_chunk(blocks, max_tokens, tree.metadata)

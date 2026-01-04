@@ -257,11 +257,6 @@ def generate_cmd(
         "--extra-tags",
         help="Additional tags (comma-separated)",
     ),
-    chunk_level: Optional[int] = typer.Option(
-        None,
-        "--chunk-level",
-        help="Heading level to chunk at (1-6, default: auto)",
-    ),
     include_parent_chain: bool = typer.Option(
         True,
         "--include-parent-chain/--no-parent-chain",
@@ -287,7 +282,7 @@ def generate_cmd(
     """Generate Anki cards from documents."""
     # Import parser here to avoid circular imports and speed up CLI startup
     from .parser import build_document_tree
-    from .pipeline import process_pipeline, auto_detect_level
+    from .pipeline import process_pipeline
 
     # Validate input path
     if not input_path.exists():
@@ -341,23 +336,19 @@ def generate_cmd(
             for key, value in tree.metadata.raw_data.items():
                 console.print(f"  - {key}: {value}")
 
-        # Determine chunk level
-        actual_level = chunk_level
-        if actual_level is None:
-            actual_level = auto_detect_level(tree, max_tokens)
-
         if verbose:
             console.print(f"[blue]Document tree:[/blue] {tree}")
-            console.print(f"[blue]Chunk level:[/blue] {actual_level}")
 
         # Interactive classification if requested
         classified_nodes = None
         if interactive:
             from .pipeline import run_interactive_session
 
+            # Use minimum heading level for interactive mode
+            interactive_level = tree.min_level if tree.min_level > 0 else 2
             classified_nodes = run_interactive_session(
                 tree=tree,
-                level=actual_level,
+                level=interactive_level,
                 console=console,
                 filename=str(file_path.name),
             )
@@ -370,7 +361,6 @@ def generate_cmd(
         try:
             chunk_contexts = process_pipeline(
                 tree=tree,
-                chunk_level=actual_level,
                 max_tokens=max_tokens,
                 include_parent_chain=include_parent_chain,
                 classified_nodes=classified_nodes,
@@ -380,12 +370,22 @@ def generate_cmd(
             return
 
         if verbose:
+            from .parser import count_tokens
+
             console.print(f"[blue]Chunks:[/blue] {len(chunk_contexts)}")
             for i, ctx in enumerate(chunk_contexts):
-                preview = ctx.chunk_content[:100].replace("\n", " ")
+                tokens = count_tokens(ctx.chunk_content)
                 chain_str = " > ".join(ctx.parent_chain) if ctx.parent_chain else "(root)"
-                console.print(f"  [{i+1}] {chain_str}")
-                console.print(f"      {preview}...")
+
+                # Show beginning and ending of content
+                content = ctx.chunk_content.replace("\n", " ")
+                if len(content) > 80:
+                    preview = f"{content[:40]}...{content[-30:]}"
+                else:
+                    preview = content
+
+                console.print(f"  [{i+1}] {chain_str} (tokens: {tokens})")
+                console.print(f"      {preview}")
 
         if dry_run:
             console.print(f"\n[green]Dry run complete for {file_path}[/green]")

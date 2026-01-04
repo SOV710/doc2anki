@@ -190,6 +190,43 @@ class TestDocumentTree:
             nodes = tree.get_nodes_at_level(level)
             assert all(n.level == level for n in nodes)
 
+    def test_get_chunks_at_level_includes_shallow_branches(self):
+        """Test that get_chunks_at_level doesn't discard branches without target level."""
+        content = """# Title
+
+## 1
+
+### 1-1
+
+Content 1-1
+
+## 2
+
+### 2-1
+
+#### 2-1-1
+
+Content 2-1-1
+
+### 2-2
+
+Content 2-2
+"""
+        tree = build_document_tree(content, format="markdown")
+
+        # At level 4, we should get:
+        # - 1-1 (leaf, depth insufficient)
+        # - 2-1-1 (exactly level 4)
+        # - 2-2 (leaf, depth insufficient)
+        chunks = tree.get_chunks_at_level(4)
+
+        assert len(chunks) == 3
+
+        titles = [chunk.title for chunk in chunks]
+        assert "1-1" in titles
+        assert "2-1-1" in titles
+        assert "2-2" in titles
+
     def test_tree_iter_all_nodes(self):
         tree = build_document_tree(FIXTURES_DIR / "sample.md")
 
