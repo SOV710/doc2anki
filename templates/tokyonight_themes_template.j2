@@ -1,0 +1,101 @@
+{% if global_context %}
+## 文档全局上下文
+
+以下是本文档的关键术语和背景信息，生成卡片时请参考：
+
+{% for term, definition in global_context.items() %}
+- **{{ term }}**: {{ definition }}
+{% endfor %}
+
+---
+{% endif %}
+
+请根据以下内容生成 Anki 学习卡片，使用 Tokyo Night 配色风格。
+
+## 卡片类型要求
+
+1. **basic**（基础问答）：适合概念理解、原理解释
+2. **cloze**（填空）：适合记忆具体细节、列表项
+3. 每张卡片应该是原子化的，只测试一个知识点
+4. 问题应该清晰明确，答案应该简洁准确
+
+## HTML 样式规范
+
+### Basic 卡片样式
+
+**正面（Front）：**
+```html
+<div style="max-width: 800px; margin: 0 auto; background-color: #16161e; border-radius: 8px; padding: 32px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border: 1px solid #292e42;">
+  <p style="margin: 0; font-size: 18px; color: #c0caf5; line-height: 1.8;">问题内容，使用 <strong style="color: #7aa2f7; font-weight: 600;">蓝色</strong> 强调关键词</p>
+</div>
+```
+
+**背面（Back）：**
+- 对于列表式答案，使用 `<ol>` 或 `<ul>` 标签
+- 对于段落式答案，使用 `<p>` 标签，必要时使用 `<h2>` 分节
+- 数学公式使用 `<anki-mathjax>` 标签包裹
+- 公式区块使用深色背景突出显示
+
+**样式要点：**
+- 主容器：`background-color: #16161e; border: 1px solid #292e42`
+- 主文本：`color: #a9b1d6; font-size: 16px`
+- 强调文字：`color: #7aa2f7` (蓝色) 或 `color: #9ece6a` (绿色)
+- 标题：`color: #7aa2f7; border-bottom: 2px solid #292e42`
+- 列表标记颜色：`#ff9e64` (橙色，通过 CSS ::marker 实现)
+- 公式背景：`background-color: #1a1b26; border: 1px solid #292e42`
+
+### Cloze 卡片样式
+
+**文本内容：**
+- 使用 Anki 的挖空语法：用两个大括号 + c1/c2/c3 + 两个冒号 + 内容 + 两个大括号（避免被 jinja2 解析）
+- 示例表示方式：`[CLOZE:c1:内容]` - AI 需将此转换为正确的 Anki 语法
+- 可以有多个挖空：`[CLOZE:c1:第一个]`、`[CLOZE:c2:第二个]`
+
+**HTML 结构：**
+```html
+<div style="max-width: 800px; margin: 0 auto; background-color: #16161e; border-radius: 8px; padding: 32px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border: 1px solid #292e42;">
+  <p style="margin: 0; font-size: 16px; color: #a9b1d6; line-height: 1.8;">
+    包含挖空的文本内容，<strong style="color: #7aa2f7; font-weight: 600;">关键词</strong>用蓝色强调
+  </p>
+</div>
+```
+
+**Cloze 样式规范：**
+- 如果是列表型挖空，建议使用 `<ol>` 或 `<ul>` 包裹
+- 段落型挖空使用 `<p>` 标签
+- 保持与 basic 卡片一致的 Tokyo Night 配色
+
+## 输出格式
+
+请严格按照以下 JSON schema 输出：
+
+{% raw %}
+```json
+{
+  "cards": [
+    {
+      "type": "basic",
+      "front": "<div style=\"max-width: 800px; margin: 0 auto; background-color: #16161e; border-radius: 8px; padding: 32px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border: 1px solid #292e42;\"><p style=\"margin: 0; font-size: 18px; color: #c0caf5; line-height: 1.8;\">问题内容</p></div>",
+      "back": "<div style=\"max-width: 800px; margin: 0 auto; background-color: #16161e; border-radius: 8px; padding: 32px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border: 1px solid #292e42;\"><p style=\"margin: 0; font-size: 16px; color: #a9b1d6; line-height: 1.8;\">答案内容</p></div>\n\n<style>\n::selection {\n  background-color: #283457;\n  color: #c0caf5;\n}\n</style>",
+      "tags": ["tag1", "tag2"]
+    },
+    {
+      "type": "cloze",
+      "text": "<div style=\"max-width: 800px; margin: 0 auto; background-color: #16161e; border-radius: 8px; padding: 32px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border: 1px solid #292e42;\"><p style=\"margin: 0; font-size: 16px; color: #a9b1d6; line-height: 1.8;\">这是[CLOZE:c1:填空内容]的示例</p></div>\n\n<style>\n::selection {\n  background-color: #283457;\n  color: #c0caf5;\n}\n</style>",
+      "tags": ["tag1"]
+    }
+  ]
+}
+```
+{% endraw %}
+
+**重要说明：**
+1. 所有 HTML 必须是完整的、可直接使用的
+2. `[CLOZE:c1:内容]` 需要转换为 Anki 的标准挖空语法（两个花括号 c1 双冒号 内容 两个花括号）
+3. 样式部分的 `<style>` 标签必须包含在 back 或 text 字段中
+4. 对于列表型内容，必须使用 `<ol>` 或 `<ul>` 标签，并添加 `::marker` 样式
+5. JSON 中的 HTML 需要正确转义双引号
+
+## 待处理内容
+
+{{ chunk_content }}
