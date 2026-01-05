@@ -106,6 +106,15 @@ def generate_cards_for_chunk(
     """
     prompt = build_prompt(global_context, chunk, template, parent_chain)
 
+    # TEMP DEBUG: dump rendered prompt
+    if verbose:
+        console.print("\n" + "=" * 100)
+        console.print("[bold yellow]TEMP DEBUG: Rendered Prompt[/bold yellow]")
+        console.print(f"[dim]model={model}  parent_chain={parent_chain}  chunk_len={len(chunk)}  prompt_len={len(prompt)}[/dim]")
+        console.print("-" * 100)
+        console.print(prompt)
+        console.print("=" * 100 + "\n")
+
     for attempt in range(max_retries):
         try:
             if verbose:
@@ -130,52 +139,3 @@ def generate_cards_for_chunk(
                 sys.exit(1)
 
     return []  # Should not reach here
-
-
-def generate_cards_for_chunks(
-    chunks: List[str],
-    global_context: dict[str, str],
-    provider_config: ProviderConfig,
-    prompt_template_path: Optional[Path] = None,
-    max_retries: int = 3,
-    verbose: bool = False,
-) -> List[Union[BasicCard, ClozeCard]]:
-    """
-    Generate cards for all chunks.
-
-    Args:
-        chunks: List of content chunks
-        global_context: Document-level context
-        provider_config: Provider configuration
-        prompt_template_path: Custom template path
-        max_retries: Max retry attempts
-        verbose: Verbose output
-
-    Returns:
-        List of all generated cards
-    """
-    client = create_client(provider_config)
-    template = load_template(prompt_template_path)
-
-    all_cards = []
-
-    for i, chunk in enumerate(chunks):
-        if verbose:
-            console.print(f"[blue]Processing chunk {i + 1}/{len(chunks)}...[/blue]")
-
-        cards = generate_cards_for_chunk(
-            chunk=chunk,
-            global_context=global_context,
-            client=client,
-            model=provider_config.model,
-            template=template,
-            max_retries=max_retries,
-            verbose=verbose,
-        )
-
-        all_cards.extend(cards)
-
-        if verbose:
-            console.print(f"  [green]Generated {len(cards)} cards[/green]")
-
-    return all_cards
