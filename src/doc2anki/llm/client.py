@@ -34,7 +34,7 @@ def call_llm(
     client: OpenAI,
     model: str,
     prompt: str,
-    max_tokens,
+    max_tokens: int = 8192,
     use_json_mode: bool = True,
 ) -> str:
     """
