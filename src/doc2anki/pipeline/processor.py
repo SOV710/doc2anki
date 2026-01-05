@@ -179,6 +179,11 @@ def _process_with_classified_nodes(
     """
     Process pre-classified nodes (interactive mode).
 
+    Uses "independent classification" semantics:
+    - Each node is classified independently
+    - Uses own_text (not full_content) to exclude child content
+    - Parent=CARD + Child=SKIP means parent only includes its direct content
+
     Args:
         tree: DocumentTree
         classified_nodes: Pre-classified nodes
@@ -188,26 +193,40 @@ def _process_with_classified_nodes(
     Returns:
         List of ChunkWithContext objects
     """
-    accumulated_ctx = ""
-    result: list[ChunkWithContext] = []
+    # Build ContentBlocks from CARD/FULL nodes (using own_text semantics)
+    card_blocks: list[ContentBlock] = []
+    context_content = ""
 
     for cn in classified_nodes:
         if cn.chunk_type == ChunkType.SKIP:
             continue
 
-        # For nodes that generate cards, create ChunkWithContext
+        # For nodes that generate cards, create ContentBlock
+        # Use node.content (direct content only), not full_content
         if cn.should_generate_cards:
-            chunk_ctx = ChunkWithContext(
-                metadata=tree.metadata,
-                accumulated_context=accumulated_ctx,
-                parent_chain=cn.node.path if include_parent_chain else (),
-                chunk_content=cn.node.full_content,
+            card_blocks.append(
+                ContentBlock(
+                    level=cn.node.level,
+                    heading="#" * cn.node.level + " " + cn.node.title,
+                    content=cn.node.content,  # Direct content only
+                    path=cn.node.path if include_parent_chain else (),
+                )
             )
-            result.append(chunk_ctx)
 
-        # Update accumulated context for subsequent chunks
+        # Accumulate context using own_text (not full_content)
         if cn.should_add_to_context:
-            accumulated_ctx += f"\n\n{cn.node.full_content}"
+            context_content += f"\n\n{cn.node.own_text}"
+
+    if not card_blocks:
+        return []
+
+    # Execute greedy_chunk on card blocks
+    result = greedy_chunk(card_blocks, max_tokens, tree.metadata)
+
+    # Attach accumulated context to all chunks
+    if context_content.strip():
+        for chunk in result:
+            chunk.accumulated_context = context_content.strip()
 
     return result
 

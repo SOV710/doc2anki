@@ -21,16 +21,12 @@ INPUT_MAP: dict[str, ChunkType] = {
     "s": ChunkType.SKIP,
 }
 
-# Warning threshold for large chunks (tokens)
-LARGE_CHUNK_THRESHOLD = 2000
-
 
 @dataclass
 class InteractiveSession:
     """Manages interactive chunk classification."""
 
     tree: DocumentTree
-    level: int
     nodes: list[HeadingNode] = field(default_factory=list)
     classified: list[ClassifiedNode] = field(default_factory=list)
     current_index: int = 0
@@ -38,7 +34,8 @@ class InteractiveSession:
 
     def __post_init__(self) -> None:
         """Initialize nodes and classified list from tree."""
-        self.nodes = self.tree.get_nodes_at_level(self.level)
+        # Traverse all nodes in document order (depth-first)
+        self.nodes = list(self.tree.iter_all_nodes())
         # Initialize all as CARD_ONLY (default)
         self.classified = [
             ClassifiedNode(node=n, chunk_type=ChunkType.CARD_ONLY)
@@ -65,12 +62,14 @@ class InteractiveSession:
         Classify the current node and advance.
 
         Returns the token count of the classified chunk.
+        Uses own_text (not full_content) for independent classification.
         """
         if self.is_complete:
             return 0
 
         node = self.nodes[self.current_index]
-        tokens = count_tokens(node.full_content)
+        # Use own_text for independent classification semantics
+        tokens = count_tokens(node.own_text)
 
         self.classified[self.current_index].chunk_type = chunk_type
 
@@ -104,13 +103,24 @@ def display_section_summary(
     console: Console,
     nodes: list[HeadingNode],
     filename: str,
-    level: int,
-) -> None:
-    """Display a summary table of all sections."""
+    max_tokens: int,
+) -> list[tuple[str, int]]:
+    """
+    Display a summary table of all sections.
+
+    Args:
+        console: Rich console for output
+        nodes: List of HeadingNode to display
+        filename: Source filename for display
+        max_tokens: Maximum tokens per chunk (for oversized warning)
+
+    Returns:
+        List of (breadcrumb, tokens) tuples for oversized nodes
+    """
     console.print()
     console.print(
         Panel(
-            f"Found [cyan]{len(nodes)}[/cyan] sections at level [cyan]{level}[/cyan]",
+            f"Found [cyan]{len(nodes)}[/cyan] sections",
             title=f"[bold]Processing: {filename}[/bold]",
             border_style="blue",
         )
@@ -121,16 +131,27 @@ def display_section_summary(
     table.add_column("Section", style="cyan")
     table.add_column("Tokens", justify="right")
 
+    oversized: list[tuple[str, int]] = []
+
     for i, node in enumerate(nodes, 1):
-        tokens = count_tokens(node.full_content)
-        # Add warning indicator for large chunks
-        token_str = f"{tokens:,}"
-        if tokens > LARGE_CHUNK_THRESHOLD:
+        # Use own_text for independent classification semantics
+        tokens = count_tokens(node.own_text)
+        breadcrumb = " > ".join(node.path)
+
+        if tokens > max_tokens:
+            oversized.append((breadcrumb, tokens))
             token_str = f"[yellow]{tokens:,}[/yellow] [yellow]![/yellow]"
-        table.add_row(str(i), node.title, token_str)
+            style = "yellow"
+        else:
+            token_str = f"{tokens:,}"
+            style = None
+
+        table.add_row(str(i), breadcrumb, token_str, style=style)
 
     console.print(table)
     console.print()
+
+    return oversized
 
 
 def display_classification_help(console: Console) -> None:
@@ -147,15 +168,17 @@ def display_classification_help(console: Console) -> None:
 
 def preview_chunk(console: Console, node: HeadingNode) -> None:
     """Display a preview of the chunk content."""
-    content = node.full_content
+    # Use own_text for independent classification semantics
+    content = node.own_text
     # Truncate if too long
     max_preview = 2000
     if len(content) > max_preview:
         content = content[:max_preview] + "\n... [dim](truncated)[/dim]"
 
-    # Detect syntax for highlighting
+    # Use breadcrumb as title
+    breadcrumb = " > ".join(node.path)
     syntax = Syntax(content, "markdown", theme="monokai", line_numbers=True)
-    console.print(Panel(syntax, title=f"[bold]{node.title}[/bold]", border_style="cyan"))
+    console.print(Panel(syntax, title=f"[bold]{breadcrumb}[/bold]", border_style="cyan"))
 
 
 def prompt_classification(
@@ -172,18 +195,20 @@ def prompt_classification(
     if node is None:
         return "done"
 
-    tokens = count_tokens(node.full_content)
+    # Use own_text for independent classification semantics
+    tokens = count_tokens(node.own_text)
     idx = session.current_index + 1
     total = session.total
 
-    # Build prompt
+    # Build breadcrumb display
+    breadcrumb = " > ".join(node.path)
+
+    # Build prompt with token info
     token_info = f"[dim]({tokens:,} tokens)[/dim]"
-    if tokens > LARGE_CHUNK_THRESHOLD:
-        token_info = f"[yellow]({tokens:,} tokens)[/yellow]"
 
     console.print(
         f"Section [bold]{idx}/{total}[/bold] "
-        f"[cyan]\"{node.title}\"[/cyan] {token_info}"
+        f"[cyan]{breadcrumb}[/cyan] {token_info}"
     )
 
     try:
@@ -243,30 +268,38 @@ def show_token_info(
 
 def run_interactive_session(
     tree: DocumentTree,
-    level: int,
     console: Console,
     filename: str = "",
+    max_tokens: int = 3000,
 ) -> list[ClassifiedNode]:
     """
     Run an interactive classification session.
 
     Args:
         tree: DocumentTree to classify
-        level: Heading level to classify at
         console: Rich console for output
         filename: Source filename for display
+        max_tokens: Maximum tokens per chunk (for oversized warnings)
 
     Returns:
         List of ClassifiedNode with user classifications
     """
-    session = InteractiveSession(tree=tree, level=level)
+    session = InteractiveSession(tree=tree)
 
     if session.total == 0:
-        console.print("[yellow]No sections found at this level.[/yellow]")
+        console.print("[yellow]No sections found.[/yellow]")
         return []
 
-    # Display summary
-    display_section_summary(console, session.nodes, filename, level)
+    # Display summary and get oversized nodes
+    oversized = display_section_summary(console, session.nodes, filename, max_tokens)
+
+    # Display oversized warnings
+    if oversized:
+        console.print(f"[yellow]Warning: {len(oversized)} section(s) exceed max_tokens ({max_tokens}):[/yellow]")
+        for breadcrumb, tokens in oversized:
+            console.print(f"  [yellow]- {breadcrumb}: {tokens} tokens[/yellow]")
+        console.print()
+
     display_classification_help(console)
 
     # Classification loop
@@ -288,7 +321,7 @@ def run_interactive_session(
         elif result == "reset":
             session.reset()
             console.print("[yellow]Reset. Starting over...[/yellow]\n")
-            display_section_summary(console, session.nodes, filename, level)
+            display_section_summary(console, session.nodes, filename, max_tokens)
             display_classification_help(console)
 
         elif result == "done":

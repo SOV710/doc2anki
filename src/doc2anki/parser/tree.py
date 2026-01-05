@@ -59,6 +59,30 @@ class HeadingNode:
 
         return "\n\n".join(parts)
 
+    @property
+    def own_text(self) -> str:
+        """
+        Get only this node's own text (without children).
+
+        Used for "independent classification" semantics where each node
+        is classified independently. Only includes:
+        - Heading line (Markdown format)
+        - Direct content (no descendants)
+
+        Format is consistent with full_content's heading line style.
+        """
+        parts = []
+
+        # Heading line (Markdown format)
+        heading_marker = "#" * self.level
+        parts.append(f"{heading_marker} {self.title}")
+
+        # Direct content only (no children)
+        if self.content.strip():
+            parts.append(self.content.strip())
+
+        return "\n\n".join(parts)
+
     def iter_descendants(self) -> Iterator[HeadingNode]:
         """Iterate over all descendant nodes (depth-first)."""
         for child in self.children:

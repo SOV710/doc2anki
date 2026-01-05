@@ -344,13 +344,11 @@ def generate_cmd(
         if interactive:
             from .pipeline import run_interactive_session
 
-            # Use minimum heading level for interactive mode
-            interactive_level = tree.min_level if tree.min_level > 0 else 2
             classified_nodes = run_interactive_session(
                 tree=tree,
-                level=interactive_level,
                 console=console,
                 filename=str(file_path.name),
+                max_tokens=max_tokens,
             )
 
             if not classified_nodes:
