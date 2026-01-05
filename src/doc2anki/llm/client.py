@@ -34,6 +34,7 @@ def call_llm(
     client: OpenAI,
     model: str,
     prompt: str,
+    max_tokens: int = 65536,
     use_json_mode: bool = True,
 ) -> str:
     """
@@ -55,6 +56,7 @@ def call_llm(
         kwargs = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
         }
 
         if use_json_mode:
@@ -121,6 +123,13 @@ def generate_cards_for_chunk(
                 console.print(f"  [dim]Attempt {attempt + 1}/{max_retries}...[/dim]")
 
             response = call_llm(client, model, prompt)
+
+            if verbose:
+                console.print("\n" + "=" * 80)
+                console.print("[dim]Raw LLM response (verbatim):[/dim]")
+                console.print(response, markup=False)
+                console.print("=" * 80 + "\n")
+
             json_data = extract_json(response)
             output = CardOutput.model_validate(json_data)
 
