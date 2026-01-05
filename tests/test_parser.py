@@ -190,43 +190,6 @@ class TestDocumentTree:
             nodes = tree.get_nodes_at_level(level)
             assert all(n.level == level for n in nodes)
 
-    def test_get_chunks_at_level_includes_shallow_branches(self):
-        """Test that get_chunks_at_level doesn't discard branches without target level."""
-        content = """# Title
-
-## 1
-
-### 1-1
-
-Content 1-1
-
-## 2
-
-### 2-1
-
-#### 2-1-1
-
-Content 2-1-1
-
-### 2-2
-
-Content 2-2
-"""
-        tree = build_document_tree(content, format="markdown")
-
-        # At level 4, we should get:
-        # - 1-1 (leaf, depth insufficient)
-        # - 2-1-1 (exactly level 4)
-        # - 2-2 (leaf, depth insufficient)
-        chunks = tree.get_chunks_at_level(4)
-
-        assert len(chunks) == 3
-
-        titles = [chunk.title for chunk in chunks]
-        assert "1-1" in titles
-        assert "2-1-1" in titles
-        assert "2-2" in titles
-
     def test_tree_iter_all_nodes(self):
         tree = build_document_tree(FIXTURES_DIR / "sample.md")
 
@@ -285,3 +248,98 @@ Some content
         org_content = "* Org Heading\nContent"
         tree = build_document_tree(org_content)
         assert tree.source_format == "org"
+
+
+class TestLosslessChunking:
+    """Tests for lossless chunking pipeline."""
+
+    def test_flatten_tree_preserves_all_content(self):
+        """Test that flatten_tree includes all document content."""
+        from doc2anki.pipeline.processor import flatten_tree
+
+        content = """# Title
+Something
+
+## 1
+Content under 1
+
+### 1-1
+Content under 1-1
+
+## 2
+Content under 2
+"""
+        tree = build_document_tree(content, format="markdown")
+        blocks = flatten_tree(tree)
+
+        # Should have 4 blocks: Title, 1, 1-1, 2
+        assert len(blocks) == 4
+
+        # Verify all content is present
+        all_text = "\n".join(b.to_text() for b in blocks)
+        assert "# Title" in all_text
+        assert "Something" in all_text
+        assert "## 1" in all_text
+        assert "Content under 1" in all_text
+        assert "### 1-1" in all_text
+        assert "Content under 1-1" in all_text
+        assert "## 2" in all_text
+        assert "Content under 2" in all_text
+
+    def test_greedy_chunk_single_chunk(self):
+        """Test that small documents become a single chunk."""
+        from doc2anki.pipeline.processor import flatten_tree, greedy_chunk
+        from doc2anki.parser.metadata import DocumentMetadata
+
+        content = """# Title
+Something
+
+## Section
+More content
+"""
+        tree = build_document_tree(content, format="markdown")
+        blocks = flatten_tree(tree)
+        chunks = greedy_chunk(blocks, max_tokens=10000, metadata=DocumentMetadata.empty())
+
+        # Should be a single chunk
+        assert len(chunks) == 1
+
+        # Chunk should contain all content
+        chunk_text = chunks[0].chunk_content
+        assert "# Title" in chunk_text
+        assert "Something" in chunk_text
+        assert "## Section" in chunk_text
+        assert "More content" in chunk_text
+
+    def test_process_pipeline_lossless(self):
+        """Test that process_pipeline preserves all content."""
+        from doc2anki.pipeline import process_pipeline
+
+        content = """# Title
+Intro content
+
+## 1
+Section 1 content
+
+### 1-1
+Deep content
+
+## 2
+Section 2 content
+"""
+        tree = build_document_tree(content, format="markdown")
+        chunks = process_pipeline(tree, max_tokens=10000)
+
+        # Should be a single chunk with all content
+        assert len(chunks) == 1
+
+        chunk_text = chunks[0].chunk_content
+        # Verify nothing is lost
+        assert "# Title" in chunk_text
+        assert "Intro content" in chunk_text
+        assert "## 1" in chunk_text
+        assert "Section 1 content" in chunk_text
+        assert "### 1-1" in chunk_text
+        assert "Deep content" in chunk_text
+        assert "## 2" in chunk_text
+        assert "Section 2 content" in chunk_text

@@ -146,40 +146,5 @@ class DocumentTree:
             yield child
             yield from child.iter_descendants()
 
-    def get_chunks_at_level(self, level: int) -> tuple[HeadingNode, ...]:
-        """
-        获取在指定 level 切分的 chunks。
-
-        对于每个分支：
-        - 如果有 level N 的子节点：返回这些 level N 节点
-        - 如果深度不足：返回该分支的叶子节点
-
-        这确保没有内容被丢弃。
-
-        Args:
-            level: 目标切分层级
-
-        Returns:
-            Tuple of HeadingNode objects to be used as chunks
-        """
-        result: list[HeadingNode] = []
-
-        def collect(node: HeadingNode) -> None:
-            if node.level >= level:
-                # 到达或超过目标 level，作为 chunk
-                result.append(node)
-            elif not node.children:
-                # 叶子节点且 level < target，作为 chunk（深度不足）
-                result.append(node)
-            else:
-                # 有子节点且 level < target，继续递归
-                for child in node.children:
-                    collect(child)
-
-        for child in self.children:
-            collect(child)
-
-        return tuple(result)
-
     def __repr__(self) -> str:
         return f"DocumentTree(children={len(self.children)}, levels={set(self.get_all_levels())})"
