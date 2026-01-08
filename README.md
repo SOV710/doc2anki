@@ -2,6 +2,8 @@
 
 Convert knowledge base documents into Anki flashcards using LLM-powered card generation.
 
+中文版: ![zh_CN](README_zh.md)
+
 ## Overview
 
 doc2anki is a CLI tool that transforms Markdown and Org-mode documents into Anki-compatible flashcard packages (`.apkg`). It leverages Large Language Models through OpenAI-compatible APIs to intelligently extract knowledge points and generate both basic Q&A cards and cloze deletion cards.
