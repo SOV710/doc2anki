@@ -2,7 +2,7 @@
 
 Convert knowledge base documents into Anki flashcards using LLM-powered card generation.
 
-中文版: ![zh_CN](README_zh.md)
+中文版: [zh_CN](README_zh.md)
 
 ## Overview
 
