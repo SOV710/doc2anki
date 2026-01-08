@@ -1,87 +1,112 @@
-# 配置指南
+# Configuration Guide
 
-## 配置文件位置
+## Configuration File Location
 
-doc2anki 按以下顺序查找配置文件：
+doc2anki searches for configuration files in the following order:
 
-1. **命令行指定** - `--config /path/to/config.toml`
-2. **当前目录** - `./config/ai_providers.toml`
-3. **用户配置目录** - `~/.config/doc2anki/ai_providers.toml`
+1. **CLI argument** - `--config /path/to/config.toml`
+2. **Current directory** - `./config/ai_providers.toml`
+3. **User config directory** - `~/.config/doc2anki/ai_providers.toml`
 
-首次使用建议将配置放在用户目录，全局可用：
+For first-time setup, place your configuration in the user directory for global access:
 
 ```sh
 mkdir -p ~/.config/doc2anki
 cp config/ai_providers.example.toml ~/.config/doc2anki/ai_providers.toml
 ```
 
-## 配置文件格式
+## Configuration File Format
 
 ```toml
 [provider_name]
-enable = true                              # 是否启用
-auth_type = "env"                          # 认证方式
-api_key = "OPENAI_API_KEY"                 # API 密钥或变量名
+enable = true                              # Whether to enable this provider
+auth_type = "env"                          # Authentication method
+api_key = "OPENAI_API_KEY"                 # API key or variable name
 default_base_url = "https://api.openai.com/v1"
 default_model = "gpt-4"
 ```
 
-## 认证方式
+## Authentication Methods
 
-### direct - 直接配置
+### direct - Direct Configuration
 
-API 密钥直接写在配置文件中：
+API key is stored directly in the configuration file:
 
 ```toml
 [local_llm]
 enable = true
 auth_type = "direct"
-api_key = "sk-xxxxxxxxxxxxxxxx"
-default_base_url = "http://localhost:11434/v1"
-default_model = "qwen2.5:14b"
+base_url = "http://localhost:11434/v1"
+model = "qwen2.5:14b"
+api_key = "ollama"
 ```
 
-**注意:** 确保配置文件权限正确，避免密钥泄露。
+**Note:** Ensure proper file permissions to prevent key exposure.
 
-### env - 环境变量
+### env - Environment Variable
 
-从环境变量读取 API 密钥：
+Read API key from an environment variable:
 
 ```toml
 [openai]
 enable = true
 auth_type = "env"
-api_key = "OPENAI_API_KEY"    # 环境变量名
-default_base_url = "https://api.openai.com/v1"
-default_model = "gpt-4o"
+api_key = "OPENAI_API_KEY"           # Environment variable name
+base_url = "OPENAI_BASE_URL"         # Optional: env var for base URL
+model = "OPENAI_MODEL"               # Optional: env var for model
+default_base_url = "https://api.openai.com/v1"  # Fallback value
+default_model = "gpt-4o"                        # Fallback value
 ```
 
-使用前设置环境变量：
+Set the environment variable before use:
 
 ```sh
 export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
 ```
 
-### dotenv - .env 文件
+### dotenv - .env File
 
-从项目根目录的 `.env` 文件加载：
+Load credentials from a `.env` file:
 
 ```toml
 [deepseek]
 enable = true
 auth_type = "dotenv"
-api_key = "DEEPSEEK_API_KEY"  # .env 文件中的键名
-default_base_url = "https://api.deepseek.com/v1"
+dotenv_path = "/home/user/.env"      # Path to .env file (required)
+api_key = "DEEPSEEK_API_KEY"         # Key name in .env file
+base_url = "DEEPSEEK_BASE_URL"       # Optional: key name for base URL
+model = "DEEPSEEK_MODEL"             # Optional: key name for model
+default_base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
 ```
 
-`.env` 文件内容：
+Example `.env` file content:
 
 ```
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 ```
 
-## 常用提供商配置示例
+## Configuration Field Reference
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `enable` | Whether to enable this provider (`true`/`false`) |
+| `auth_type` | Authentication method: `direct`, `env`, or `dotenv` |
+| `api_key` | API key value or variable name (depends on auth_type) |
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `base_url` | API endpoint URL (or env var name for `env`/`dotenv`) |
+| `model` | Model name (or env var name for `env`/`dotenv`) |
+| `default_base_url` | Fallback base URL for `env`/`dotenv` modes |
+| `default_model` | Fallback model name for `env`/`dotenv` modes |
+| `dotenv_path` | Path to `.env` file (required for `dotenv` auth) |
+
+## Provider Configuration Examples
 
 ### OpenAI
 
@@ -99,13 +124,13 @@ default_model = "gpt-4o"
 ```toml
 [deepseek]
 enable = true
-auth_type = "dotenv"
+auth_type = "env"
 api_key = "DEEPSEEK_API_KEY"
-default_base_url = "https://api.deepseek.com/v1"
+default_base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
 ```
 
-### 阿里云百炼 (Qwen)
+### Alibaba Cloud Bailian (Qwen)
 
 ```toml
 [qwen]
@@ -116,7 +141,7 @@ default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 default_model = "qwen-plus"
 ```
 
-### 智谱 AI (GLM)
+### Zhipu AI (GLM)
 
 ```toml
 [zhipu]
@@ -127,7 +152,7 @@ default_base_url = "https://open.bigmodel.cn/api/paas/v4"
 default_model = "glm-4-flash"
 ```
 
-### 月之暗面 (Moonshot)
+### Moonshot AI
 
 ```toml
 [moonshot]
@@ -138,50 +163,133 @@ default_base_url = "https://api.moonshot.cn/v1"
 default_model = "moonshot-v1-auto"
 ```
 
-### 本地 Ollama
+### Local Ollama
 
 ```toml
 [ollama]
 enable = true
 auth_type = "direct"
-api_key = "ollama"   # Ollama 不需要真实密钥
-default_base_url = "http://localhost:11434/v1"
-default_model = "qwen2.5:14b"
+api_key = "ollama"              # Ollama doesn't require a real key
+base_url = "http://localhost:11434/v1"
+model = "qwen2.5:14b"
 ```
 
-## 验证配置
+### OpenRouter
 
-检查所有启用的提供商：
+```toml
+[openrouter]
+enable = true
+auth_type = "env"
+api_key = "OPENROUTER_API_KEY"
+default_base_url = "https://openrouter.ai/api/v1"
+default_model = "anthropic/claude-3.5-sonnet"
+```
+
+### Together AI
+
+```toml
+[together]
+enable = true
+auth_type = "env"
+api_key = "TOGETHER_API_KEY"
+default_base_url = "https://api.together.xyz/v1"
+default_model = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+```
+
+## Validating Configuration
+
+Check all enabled providers:
 
 ```sh
 doc2anki validate
 ```
 
-检查特定提供商：
+Check a specific provider:
 
 ```sh
 doc2anki validate -p openai
 ```
 
-查看所有提供商（包括禁用的）：
+List all providers (including disabled):
 
 ```sh
 doc2anki list --all
 ```
 
-## 配置字段说明
+## Multiple Provider Setup
 
-| 字段 | 必需 | 说明 |
-|-----|------|------|
-| `enable` | Yes | 是否启用此提供商 |
-| `auth_type` | Yes | 认证方式: `direct`, `env`, `dotenv` |
-| `api_key` | Yes | API 密钥或变量名（取决于 auth_type） |
-| `default_base_url` | Yes | API 端点 URL |
-| `default_model` | Yes | 默认使用的模型名称 |
+You can configure multiple providers and switch between them:
 
-## 安全建议
+```toml
+[openai]
+enable = true
+auth_type = "env"
+api_key = "OPENAI_API_KEY"
+default_base_url = "https://api.openai.com/v1"
+default_model = "gpt-4o"
 
-1. **不要将密钥提交到版本控制** - `ai_providers.toml` 已在 `.gitignore` 中
-2. **使用环境变量或 dotenv** - 生产环境推荐使用 `env` 或 `dotenv` 类型
-3. **限制文件权限** - `chmod 600 ~/.config/doc2anki/ai_providers.toml`
-4. **定期轮换密钥** - 遵循各提供商的安全最佳实践
+[deepseek]
+enable = true
+auth_type = "env"
+api_key = "DEEPSEEK_API_KEY"
+default_base_url = "https://api.deepseek.com"
+default_model = "deepseek-chat"
+
+[ollama]
+enable = true
+auth_type = "direct"
+api_key = "ollama"
+base_url = "http://localhost:11434/v1"
+model = "qwen2.5:14b"
+```
+
+Use the `-p` flag to select a provider:
+
+```sh
+doc2anki generate notes.md -p openai
+doc2anki generate notes.md -p deepseek
+doc2anki generate notes.md -p ollama
+```
+
+## Security Best Practices
+
+1. **Don't commit keys to version control** - `ai_providers.toml` is already in `.gitignore`
+2. **Use environment variables or dotenv** - Recommended for production environments
+3. **Restrict file permissions** - `chmod 600 ~/.config/doc2anki/ai_providers.toml`
+4. **Rotate keys regularly** - Follow each provider's security best practices
+5. **Use different configs for different projects** - Pass `--config` to isolate credentials
+
+## Troubleshooting
+
+### Provider not found
+
+```
+Error: Provider 'xxx' not found in configuration
+```
+
+Check that:
+1. The provider section exists in your config file
+2. `enable = true` is set
+3. The config file path is correct
+
+### Authentication failed
+
+```
+Error: Failed to authenticate with provider
+```
+
+Verify:
+1. API key is correct
+2. For `env` auth: environment variable is set
+3. For `dotenv` auth: `.env` file path and key name are correct
+
+### Connection refused
+
+```
+Error: Connection refused
+```
+
+For local providers (Ollama), ensure:
+1. The service is running
+2. The port is correct
+3. No firewall blocking the connection

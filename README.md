@@ -1,38 +1,37 @@
 # doc2anki
 
-⚠WARNING: _This project is in an early development phase and is not ready for use._
+Convert knowledge base documents into Anki flashcards using LLM-powered card generation.
 
-## 概述
+## Overview
 
-doc2anki 可以将任何知识库文档转换为 Anki 学习卡片。这是为了减轻 ankier 们繁重的制卡工作而诞生的
+doc2anki is a CLI tool that transforms Markdown and Org-mode documents into Anki-compatible flashcard packages (`.apkg`). It leverages Large Language Models through OpenAI-compatible APIs to intelligently extract knowledge points and generate both basic Q&A cards and cloze deletion cards.
 
-通过 (自己提供 API 的) 大语言模型, 从 Markdown 或 Org-mode 文档中提取知识点，生成符合间隔重复学习规律的记忆卡片。
+### Key Features
 
-未来可能考虑支持别的笔记格式，如果有人提 issue 的话
+- **Smart Document Parsing**: Parses Markdown and Org-mode with full AST support via tree-sitter
+- **Intelligent Chunking**: Auto-detects optimal heading level for document segmentation
+- **Context-Aware Generation**: Preserves heading hierarchy and document metadata for better card quality
+- **Interactive Classification**: Fine-grained control over which sections generate cards
+- **Flexible Output**: Automatic deck hierarchy and tag generation from file paths
 
-## 环境要求
+## Requirements
 
-- Python 3.12 或更高版本
-- 支持 OpenAI API 格式的语言模型服务
-  - 像是 Anthropic, Google 的 API 就不支持 (截止至 2025-12-29)
+- Python 3.12 or higher
+- An OpenAI-compatible LLM API service
 
-## 安装
+## Installation
 
-### 全局安装 (推荐)
-
-由于这个包已经被我~~拉~~ publish 到了 PyPI，所以你可以使用 pipx 或 uv 全局安装
-
-安装了之后，可在任意位置运行：
+### Global Installation (Recommended)
 
 ```sh
-# 使用 pipx
+# Using pipx
 pipx install doc2anki
 
-# 或使用 uv
+# Or using uv
 uv tool install doc2anki
 ```
 
-### 开发环境
+### Development Setup
 
 ```sh
 git clone https://github.com/SOV710/doc2anki
@@ -40,227 +39,220 @@ cd doc2anki
 uv sync
 ```
 
-## 配置
+## Quick Start
 
-### 配置文件位置
+1. **Create a configuration file** at `~/.config/doc2anki/ai_providers.toml`:
 
-doc2anki 目前只有一种配置文件，就是配置 ai api 入口的 TOML 文件, 就是 `ai_providers.toml`
-
-doc2anki 按以下顺序查找配置文件：
-
-1. 命令行指定的路径 (`--config`)
-2. 当前目录: `./config/ai_providers.toml`
-3. 用户配置目录: `~/.config/doc2anki/ai_providers.toml`
-
-### 配置格式
-
-doc2anki 设计了三种认证方式
-
-| 认证类型 | api_key 含义 | 示例 |
-|---------|-------------|------|
-| `direct` | API 密钥本身 | `api_key = "sk-xxx..."` |
-| `env` | 环境变量名 | `api_key = "OPENAI_API_KEY"` |
-| `dotenv` | .env 文件中的键名 | `api_key = "API_KEY"` |
-
-1. direct mode
-这是最不安全的配置方式，将自己的 api key 直接放在 toml 配置文件中
-
-下面均以 deepseek 的 api 举例说明
-
-``` toml
-[deepseek]
+```toml
+[openai]
 enable = true
-auth_type = "direct"
-base_url = "https://api.deepseek.com"
-model = "deepseek-chat"
-api_key = "sk-xxxxxxxxxxxxxxxx"
+auth_type = "env"
+api_key = "OPENAI_API_KEY"
+default_base_url = "https://api.openai.com/v1"
+default_model = "gpt-4o"
 ```
 
-2. env mode
+2. **Set your API key**:
 
-这是稍微安全一点的配置方式，将自己的 api key 配置在环境变量中，然后让 doc2anki 主动读取对应的环境变量
+```sh
+export OPENAI_API_KEY="sk-..."
+```
 
-当然，你可以设置 fallback 后的 default 模式，不过对于 api key 来说，没有什么"fallback mode"
+3. **Generate flashcards**:
+
+```sh
+doc2anki generate notes.md -p openai -o flashcards.apkg
+```
+
+## Configuration
+
+doc2anki searches for configuration files in this order:
+
+1. Path specified via `--config`
+2. `./config/ai_providers.toml`
+3. `~/.config/doc2anki/ai_providers.toml`
+
+### Authentication Methods
+
+| Auth Type | Description | `api_key` Field |
+|-----------|-------------|-----------------|
+| `direct` | Credentials in config file | The API key itself |
+| `env` | Read from environment variable | Environment variable name |
+| `dotenv` | Load from `.env` file | Key name in `.env` file |
+
+### Example: Environment Variable Authentication
 
 ```toml
 [deepseek]
 enable = true
 auth_type = "env"
-base_url = "DEEPSEEK_BASE_URL"
-model = "DEEPSEEK_MODEL"
 api_key = "DEEPSEEK_API_KEY"
 default_base_url = "https://api.deepseek.com"
 default_model = "deepseek-chat"
 ```
 
-3. dotenv mode
-
-这是最安全的配置方式，将自己的 api key 注入单独的 .env 文件中而不是对所有程序可见的环境变量中
-
-不过，你必须设置 .env 文件的 path, 否则 doc2anki 找不到
+### Example: Direct Authentication (Local LLM)
 
 ```toml
-[deepseek]
+[ollama]
 enable = true
-auth_type = "dotenv"
-base_url = "DEEPSEEK_BASE_URL"
-model = "DEEPSEEK_MODEL"
-api_key = "DEEPSEEK_API_KEY"
-dotenv_path = "/home/user/.env"
-default_base_url = "https://api.deepseek.com"
-default_model = "deepseek-chat"
+auth_type = "direct"
+api_key = "ollama"
+default_base_url = "http://localhost:11434/v1"
+default_model = "qwen2.5:14b"
 ```
 
-配置完成后，通过 `doc2anki list` 列出当前配置文件中被 enable 的 api providers, `doc2anki list --all` 列出所有 providers
+See [docs/configuration.md](docs/configuration.md) for detailed configuration options.
 
-## 使用
+## Usage
 
-### 查看可用的模型提供商
+### List Available Providers
 
 ```sh
 doc2anki list
-doc2anki list --all  # 包含已禁用的提供商
+doc2anki list --all  # Include disabled providers
 ```
 
-### 验证配置
+### Validate Configuration
 
 ```sh
 doc2anki validate
-doc2anki validate -p provider_name
+doc2anki validate -p openai
 ```
 
-### 生成卡片
+### Generate Flashcards
 
 ```sh
-doc2anki generate input.md -p provider_name -o output.apkg
+# Single file
+doc2anki generate input.md -p openai -o output.apkg
+
+# Entire directory (recursive)
+doc2anki generate docs/ -p openai -o knowledge.apkg
 ```
 
-处理整个目录:
+### CLI Options
+
+**Basic Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output` | `outputs/output.apkg` | Output file path |
+| `-p, --provider` | (required) | AI provider name |
+| `-c, --config` | (auto-detect) | Configuration file path |
+| `--prompt-template` | (built-in) | Custom Jinja2 prompt template |
+| `--dry-run` | false | Parse and chunk only, skip LLM calls |
+| `-I, --interactive` | false | Interactively classify each section |
+| `--verbose` | false | Show detailed output |
+
+**Chunking Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--max-tokens` | 3000 | Maximum tokens per chunk |
+| `--max-retries` | 3 | LLM API retry attempts |
+| `--include-parent-chain` | true | Include heading hierarchy in prompts |
+
+**Card Organization:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--deck-depth` | 2 | Deck hierarchy depth from file path |
+| `--extra-tags` | (none) | Additional tags (comma-separated) |
+
+### Interactive Mode
+
+Use `-I` or `--interactive` for fine-grained control over card generation:
 
 ```sh
-doc2anki generate docs/ -p provider_name -o output.apkg
+doc2anki generate notes.md -p openai --interactive
 ```
 
-### 命令行选项
+Interactive mode allows you to classify each section as:
 
-**全局选项:**
+| Type | Cards | Context | Use Case |
+|------|-------|---------|----------|
+| **Full** | Yes | Yes | Fundamental concepts, definitions |
+| **Card-only** | Yes | No | Independent knowledge points (default) |
+| **Context-only** | No | Yes | Background information, prerequisites |
+| **Skip** | No | No | Irrelevant content |
 
-| 选项 | 说明 |
-|-----|------|
-| `-v, --version` | 显示版本号并退出 |
+### Automatic Chunking
 
-**基本选项:**
+When no specific chunking level is specified, doc2anki automatically selects the optimal heading level by analyzing:
 
-| 选项 | 默认值 | 说明 |
-|-----|-------|------|
-| `-o, --output` | `outputs/output.apkg` | 输出文件路径 |
-| `-p, --provider` | (必需) | AI 提供商名称 |
-| `-c, --config` | (自动查找) | 配置文件路径 |
-| `--dry-run` | false | 仅解析分块，不调用 LLM |
-| `--verbose` | false | 显示详细输出 |
+- Number of resulting chunks (minimum 2)
+- Average chunk size (target: 500-2500 tokens)
+- Size distribution uniformity (standard deviation < 50% of mean)
 
-**分块控制:**
+## Document Formats
 
-| 选项 | 默认值 | 说明 |
-|-----|-------|------|
-| `--chunk-level` | 自动检测 | 按指定标题级别分块 (1-6) |
-| `--max-tokens` | 3000 | 每个块的最大 token 数量 |
-| `--include-parent-chain` | true | 在提示词中包含标题层级路径 |
+### Markdown
 
-**卡片组织:**
+doc2anki parses Markdown documents with:
+- YAML frontmatter for metadata
+- ATX and Setext heading styles
+- Code blocks, lists, tables, and quotes
 
-| 选项 | 默认值 | 说明 |
-|-----|-------|------|
-| `--deck-depth` | 2 | 从文件路径生成卡组层级的深度 |
-| `--extra-tags` | (无) | 额外标签，逗号分隔 |
+### Org-mode
 
-## 分块策略
+doc2anki supports Org-mode with:
+- File-level keywords (`#+TITLE`, `#+AUTHOR`, `#+FILETAGS`)
+- Property drawers
+- All standard Org heading levels
 
-### 自动检测
+### File Path to Deck Mapping
 
-默认情况下，doc2anki 自动检测最佳分块级别：
-
-1. 遍历各标题级别 (1-6)
-2. 计算每个级别的平均块大小和方差
-3. 选择满足以下条件的级别：
-   - 至少产生 2 个块
-   - 平均块大小在 500-2400 tokens 之间
-   - 块大小分布均匀（标准差 < 平均值的 50%）
-
-### 手动指定
-
-对于特殊文档结构，可手动指定分块级别：
-
-```sh
-# 按二级标题分块, 在 markdown 中即为 ##
-doc2anki generate input.md -p provider --chunk-level 2
-
-# 按三级标题分块，在 markdown 中即为 ###
-doc2anki generate input.md -p provider --chunk-level 3
-```
-
-### 标题层级上下文
-
-启用 `--include-parent-chain` (默认) 时，每个块会包含其在文档中的位置：
+File paths are automatically converted to Anki deck hierarchies and tags:
 
 ```
-## 内容位置
-当前内容在文档中的位置：网络基础 > TCP/IP > 三次握手
+computing/network/tcp_ip.md
+├── Deck: computing::network (with deck_depth=2)
+└── Tags: computing, network, tcp_ip
 ```
 
-这帮助 LLM 理解当前内容的上下文，生成更准确的卡片。
-
-## 文档格式
-
-### 全局上下文块 (❗deprecated)
-
-CONTEXT 块预期在 v0.2.0 版本完全被 interactive mode 取代
-
-在文档开头定义领域术语，供语言模型生成卡片时参考。
-
-Markdown 格式:
-
-```
-```context
-- TCP: "传输控制协议"
-- HTTP: "超文本传输协议"
-```
-
-Org-mode 格式:
-
-```org
-#+BEGIN_CONTEXT
-- TCP: "传输控制协议"
-- HTTP: "超文本传输协议"
-#+END_CONTEXT
-```
-
-### 文件路径与卡片组织
-
-文件路径自动转换为 Anki 卡片组层级和标签。
-
-例如: `computing/network/tcp_ip.md`
-- 卡片组: `computing::network` (深度为 2)
-- 标签: `computing`, `network`, `tcp_ip`
-
-## 项目结构
+## Project Structure
 
 ```
 src/doc2anki/
-├── cli.py              # 命令行接口
-├── config/             # 配置加载
-├── parser/             # 文档解析
-│   ├── tree.py         # AST 数据结构
-│   ├── markdown.py     # Markdown 解析
-│   └── orgmode.py      # Org-mode 解析
-├── pipeline/           # 处理管道
-│   ├── classifier.py   # 块类型分类
-│   ├── context.py      # 上下文管理
-│   └── processor.py    # 处理流程
-├── llm/                # LLM 调用
-└── output/             # APKG 生成
+├── cli.py              # CLI entry point (Typer-based)
+├── config/             # Configuration loading and validation
+├── parser/             # Document parsing (Markdown, Org-mode)
+│   ├── tree.py         # Immutable AST data structures
+│   ├── markdown.py     # tree-sitter Markdown parser
+│   ├── orgmode.py      # orgparse-based Org parser
+│   └── chunker.py      # Token-aware document chunking
+├── pipeline/           # Processing pipeline
+│   ├── classifier.py   # Chunk type classification
+│   ├── context.py      # Context management
+│   ├── processor.py    # Main pipeline orchestration
+│   └── interactive.py  # Interactive classification session
+├── llm/                # LLM integration
+│   ├── client.py       # OpenAI-compatible API client
+│   ├── prompt.py       # Jinja2 template rendering
+│   └── extractor.py    # JSON response extraction
+├── models/             # Pydantic data models
+│   └── cards.py        # BasicCard, ClozeCard definitions
+├── output/             # Output generation
+│   └── apkg.py         # genanki-based APKG creation
+└── templates/          # Prompt templates
+    └── generate_cards.j2
 ```
 
-## 许可证
+## Roadmap
+
+- **Async Support**: Add threading/asyncio for concurrent LLM calls
+- **Decoupled Styling**: LLM returns Markdown IR, doc2anki converts to styled HTML templates
+- **Built-in Themes**: Multiple card styling templates out of the box
+- **Extended API Support**: Native support for Anthropic and Google APIs
+- **Interactive TUI**: Replace Rich-based output with a Textual-based interactive terminal UI
+- **Improved Non-Interactive Workflow**: Use LLM calls to summarize context pipeline, making doc2anki more plug-and-play
+
+## Documentation
+
+- [Architecture Overview](docs/architecture.md)
+- [CLI Reference](docs/cli-reference.md)
+- [Configuration Guide](docs/configuration.md)
+
+## License
 
 MIT License
