@@ -1,5 +1,8 @@
 # doc2anki
 
+![License](https://img.shields.io/github/license/SOV710/gitlsf?style=plastic)
+![Language](https://img.shields.io/github/languages/top/SOV710/doc2anki?style=flat)
+
 Convert knowledge base documents into Anki flashcards using LLM-powered card generation.
 
 中文版: [zh_CN](README_zh.md)
